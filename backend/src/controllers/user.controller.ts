@@ -31,17 +31,17 @@ const onboarding = asyncHandler(async (req: Request, res: Response) => {
 
     const { fullName, college, bio, targetRole, experienceLevel, avatarUrl } = req.body;
 
-    if (fullName && typeof fullName !== 'string')
+    if (fullName !== undefined && typeof fullName !== 'string')
         return res.status(400).json({ error: 'Invalid fullName' });
-    if (college && typeof college !== 'string')
+    if (college !== undefined && typeof college !== 'string')
         return res.status(400).json({ error: 'Invalid college' });
-    if (bio && typeof bio !== 'string')
+    if (bio !== undefined && typeof bio !== 'string')
         return res.status(400).json({ error: 'Invalid bio' });
-    if (targetRole && typeof targetRole !== 'string')
+    if (targetRole !== undefined && typeof targetRole !== 'string')
         return res.status(400).json({ error: 'Invalid targetRole' });
-    if (experienceLevel && typeof experienceLevel !== 'string')
+    if (experienceLevel !== undefined && typeof experienceLevel !== 'string')
         return res.status(400).json({ error: 'Invalid experienceLevel' });
-    if (avatarUrl && typeof avatarUrl !== 'string')
+    if (avatarUrl !== undefined && typeof avatarUrl !== 'string')
         return res.status(400).json({ error: 'Invalid avatarUrl' });
 
     const updatedUser = await userService.onboarding(userId, {

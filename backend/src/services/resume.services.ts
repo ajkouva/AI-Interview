@@ -21,16 +21,24 @@ async function uploadResume(clerkId: string, title: string, file: Express.Multer
         file:file.buffer,
         fileName:file.originalname,
         folder:"/ai-interviews/resumes",
+        isPrivateFile: true
     });
 
     const resume = await prisma.resume.create({
         data : {
             title: title,
-            fileUrl:uploadResponse.url,
+            fileUrl: uploadResponse.filePath,
             userId:user.id,
         }
     });
-    return resume;
+    
+    const signedUrl = imagekit.url({
+        path: uploadResponse.filePath,
+        signed: true,
+        expireSeconds: 300
+    });
+
+    return { ...resume, fileUrl: signedUrl };
 
 }
 
@@ -47,7 +55,18 @@ async function getAllResumes(clerkId: string) {
     const resumes = await prisma.resume.findMany({
         where: { userId: user.id }
     });
-    return resumes;
+
+    const resumesWithSignedUrls = resumes.map(resume => {
+        if (!resume.fileUrl) return resume;
+        const signedUrl = imagekit.url({
+            path: resume.fileUrl,
+            signed: true,
+            expireSeconds: 300
+        });
+        return { ...resume, fileUrl: signedUrl };
+    });
+
+    return resumesWithSignedUrls;
 }
 
 export default {

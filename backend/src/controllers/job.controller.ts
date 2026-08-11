@@ -21,6 +21,9 @@ const createJob = asyncHandler(async (req: Request, res: Response) => {
 const getAllJobs = asyncHandler(async (req: Request, res: Response) => {
 
     const clerkId = getAuth(req).userId;
+    if (!clerkId) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
     const jobs = await jobService.getAllJobs(clerkId!);
     res.status(200).json(jobs);
 
@@ -29,6 +32,9 @@ const getAllJobs = asyncHandler(async (req: Request, res: Response) => {
 const getJobById = asyncHandler(async (req: Request, res: Response) => {
 
     const clerkId = getAuth(req).userId;
+    if (!clerkId) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
     const jobId = req.params.id as string;
     const job = await jobService.getJobById(jobId, clerkId!);
 
