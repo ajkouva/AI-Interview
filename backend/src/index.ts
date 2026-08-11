@@ -6,6 +6,7 @@ import cors from 'cors';
 import { clerkMiddleware, requireAuth, getAuth } from '@clerk/express';
 import userRouter from './routes/user.routes';
 import webhookRouter from './routes/webhook.routes';
+import jobRouter from './routes/job.routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use(clerkMiddleware());
 
 app.use("/api/users", userRouter);
+app.use("/api/jobs", jobRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');

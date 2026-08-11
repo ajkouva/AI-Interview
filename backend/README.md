@@ -12,4 +12,8 @@ To run:
 bun run index.ts
 ```
 
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
+
 This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

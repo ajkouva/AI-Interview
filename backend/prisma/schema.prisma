@@ -41,17 +41,23 @@ model User {
 }
 
 model Resume {
-  id        String             @id @default(uuid())
-  userId    String
-  title     String
-  content   String
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  sessions  InterviewSession[]
-  owner     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String             @id @default(uuid())
+  userId      String
+  title       String             
+  fileUrl     String?            
+  content     String?           
+  aiSummary   String?          
+  skills      Json?            
+  experience  Json?            
+  
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  sessions    InterviewSession[]
+  owner       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("resumes")
 }
+
 
 model JobDescription {
   id          String             @id @default(uuid())
