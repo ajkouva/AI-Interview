@@ -6,35 +6,39 @@ export interface JobInput {
 }
 
 async function createJob(clerkId: string, data: JobInput) {
-    const userId = await prisma.user.findUniqueOrThrow({
+    const user = await prisma.user.findUnique({
         where: {
             clerkId: clerkId
         }
     })
 
-    if (!userId) {
-        throw new Error("User not found in DB");
+    if (!user) {
+        const error = new Error("User not found in DB") as any;
+        error.statusCode = 404;
+        throw error;
     }
 
     const job = await prisma.jobDescription.create({
         data:{
             title:data.title,
             description:data.description,
-            userId:userId.id
+            userId:user.id
         }
     })
     return job;
 }
 
 async function getAllJobs(clerkId:string){
-    const user = await prisma.user.findUniqueOrThrow({
+    const user = await prisma.user.findUnique({
         where:{
             clerkId:clerkId
         }
     })
 
     if(!user){
-        throw new Error("User not found in DB");
+        const error = new Error("User not found in DB") as any;
+        error.statusCode = 404;
+        throw error;
     }
 
     return await prisma.jobDescription.findMany({
@@ -48,14 +52,16 @@ async function getAllJobs(clerkId:string){
 }
 
 async function getJobById(jobId:string,clerkId:string){
-    const user = await prisma.user.findUniqueOrThrow({
+    const user = await prisma.user.findUnique({
         where:{
             clerkId:clerkId
         }
     })
 
     if(!user){
-        throw new Error("User not found in DB");
+        const error = new Error("User not found in DB") as any;
+        error.statusCode = 404;
+        throw error;
     }
 
     const job = await prisma.jobDescription.findUnique({

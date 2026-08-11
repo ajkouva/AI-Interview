@@ -1,31 +1,29 @@
 import type { Request, Response } from 'express';
 import { getAuth } from '@clerk/express';
 import userService from '../services/user.services';
+import { asyncHandler } from '../middlewares/asyncHandler';
 
-async function me(req: Request, res: Response) {
+const me = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = getAuth(req);
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    try {
-        const user = await userService.me(userId);
-        if (!user) {
-            return res.json({
-                user: null,
-                needsOnboarding: true,
-            });
-        }
-        return res.json({
-            user,
-            needsOnboarding: !user.isOnboarded,
+    const user = await userService.me(userId);
+    if (!user) {
+        return res.status(200).json({
+            user: null,
+            needsOnboarding: true,
         });
-    } catch (error) {
-        return res.status(500).json({ error: 'Internal server error while fetching user profile' });
     }
-}
 
-async function onboarding(req: Request, res: Response) {
+    return res.status(200).json({
+        user,
+        needsOnboarding: !user.isOnboarded,
+    });
+});
+
+const onboarding = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = getAuth(req);
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
@@ -33,27 +31,35 @@ async function onboarding(req: Request, res: Response) {
 
     const { fullName, college, bio, targetRole, experienceLevel, avatarUrl } = req.body;
 
-    try {
-        const updatedUser = await userService.onboarding(userId, {
-            fullName,
-            college,
-            bio,
-            targetRole,
-            experienceLevel,
-            avatarUrl,
-        });
+    if (fullName && typeof fullName !== 'string')
+        return res.status(400).json({ error: 'Invalid fullName' });
+    if (college && typeof college !== 'string')
+        return res.status(400).json({ error: 'Invalid college' });
+    if (bio && typeof bio !== 'string')
+        return res.status(400).json({ error: 'Invalid bio' });
+    if (targetRole && typeof targetRole !== 'string')
+        return res.status(400).json({ error: 'Invalid targetRole' });
+    if (experienceLevel && typeof experienceLevel !== 'string')
+        return res.status(400).json({ error: 'Invalid experienceLevel' });
+    if (avatarUrl && typeof avatarUrl !== 'string')
+        return res.status(400).json({ error: 'Invalid avatarUrl' });
 
-        return res.json({
-            message: 'Onboarding completed successfully!',
-            user: updatedUser,
-        });
-    } catch (error: any) {
-        console.error("Onboarding error:", error);
-        return res.status(500).json({ error: 'Failed to complete onboarding', details: error.message || error });
-    }
-}
+    const updatedUser = await userService.onboarding(userId, {
+        fullName,
+        college,
+        bio,
+        targetRole,
+        experienceLevel,
+        avatarUrl,
+    });
+
+    return res.status(200).json({
+        message: 'Onboarding completed successfully!',
+        user: updatedUser,
+    });
+});
 
 export default {
     me,
     onboarding,
-};
+};
