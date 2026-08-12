@@ -1086,5 +1086,4 @@ uvicorn main:app --reload --port 8000
 
 ---
 
-*Document Version: 1.0 | Last Updated: July 2026*
 *Built with focus — Zero budget, maximum ambition.*
