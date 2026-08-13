@@ -8,28 +8,28 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(uuid())
-  clerkId          String   @unique
-  username         String?  @unique
-  email            String   @unique
-  authProvider     String?  @default("email")
-  
+  id           String  @id @default(uuid())
+  clerkId      String  @unique
+  username     String? @unique
+  email        String  @unique
+  authProvider String? @default("email")
+
   // Onboarding & Profile Fields
-  isOnboarded      Boolean  @default(false)
-  fullName         String?
-  avatarUrl        String?
-  college          String?
-  bio              String?  @db.Text
-  targetRole       String?
-  experienceLevel  String?
-  
+  isOnboarded     Boolean @default(false)
+  fullName        String?
+  avatarUrl       String?
+  college         String?
+  bio             String? @db.Text
+  targetRole      String?
+  experienceLevel String?
+
   // Account Status & Plan
-  role             Role     @default(USER)
-  plan             Plan     @default(FREE)
-  credits          Int      @default(3)
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  role    Role @default(USER)
+  plan    Plan @default(FREE)
+  credits Int  @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   resume         Resume[]
   jobDescription JobDescription[]
@@ -41,23 +41,28 @@ model User {
 }
 
 model Resume {
-  id          String             @id @default(uuid())
-  userId      String
-  title       String             
-  fileUrl     String?            
-  content     String?           
-  aiSummary   String?          
-  skills      Json?            
-  experience  Json?            
-  
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  sessions    InterviewSession[]
-  owner       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String  @id @default(uuid())
+  userId         String
+  fileId         String
+  fileUrl        String
+  fileName       String
+  title          String
+  content        String?
+  aiSummary      String?
+  skills         Json?
+  experience     Json?
+  education      Json?
+  projects       Json?
+  certifications Json?
+  contact Json?
+
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  sessions  InterviewSession[]
+  owner     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("resumes")
 }
-
 
 model JobDescription {
   id          String             @id @default(uuid())

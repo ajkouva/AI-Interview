@@ -6,9 +6,25 @@ export const globalErrorHandler = (err: any, req: Request, res: Response, next: 
     let statusCode = err.statusCode || 500;
     let message = err.message || "Internal Server Error";
 
+    // Handle Multer file upload errors
     if (err.code === 'LIMIT_FILE_SIZE') {
         statusCode = 413;
-        message = "File too large. Maximum size is 5MB.";
+        message = "File too large. Maximum size allowed is 5MB.";
+    } else if (err.code === 'LIMIT_UNEXPECTED_FILE' || err.message?.includes("Only PDF files are allowed")) {
+        statusCode = 400;
+        message = err.message || "Invalid file upload.";
+    }
+
+    // Handle Prisma invalid UUID / input error (P2023)
+    if (err.code === 'P2023') {
+        statusCode = 400;
+        message = "Invalid identifier format provided.";
+    }
+
+    // Handle PDF / AI parsing errors
+    if (err.message?.includes("Failed to extract text from PDF")) {
+        statusCode = 400;
+        message = "The uploaded file could not be parsed as a valid PDF.";
     }
 
     res.status(statusCode).json({
