@@ -1,10 +1,10 @@
 import type { Request, Response } from 'express';
-import { getAuth } from '@clerk/express';
+import { getClerkUserId } from '../middlewares/auth';
 import userService from '../services/user.services';
 import { asyncHandler } from '../middlewares/asyncHandler';
 
 const me = asyncHandler(async (req: Request, res: Response) => {
-    const { userId } = getAuth(req);
+    const userId = getClerkUserId(req);
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -24,7 +24,7 @@ const me = asyncHandler(async (req: Request, res: Response) => {
 });
 
 const onboarding = asyncHandler(async (req: Request, res: Response) => {
-    const { userId } = getAuth(req);
+    const userId = getClerkUserId(req);
     if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
     }

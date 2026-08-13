@@ -7,14 +7,22 @@ const resumeRouter = Router();
 
 const upload = multer({
     storage: multer.memoryStorage(),
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error("Invalid file type. Only PDF files are allowed."));
+        }
+    },
     limits: { 
-        fileSize: 5 * 1024 * 1024, // 5MB
-        fields: 5,                 // Max 5 non-file fields
-        parts: 6                   // Max 6 parts (5 fields + 1 file)
+        fileSize: 5 * 1024 * 1024, // 5MB limit
+        files: 1,
     }
 });
 
 resumeRouter.post("/upload", protectedRoute, upload.single("file"), resumeController.uploadResume);
 resumeRouter.get("/", protectedRoute, resumeController.getAllResumes);
+resumeRouter.get("/:id", protectedRoute, resumeController.getResumeById);
+resumeRouter.delete("/:id", protectedRoute, resumeController.deleteResume);
 
 export default resumeRouter;
