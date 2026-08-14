@@ -13,6 +13,9 @@ All protected routes require authentication. In production, pass the Clerk Sessi
 * **Development / Postman Bypass:** `x-clerk-user-id: user_3Hgz...` *(Only active when `NODE_ENV !== 'production'`)*
 * **Content Type:** `Content-Type: application/json` *(Except for file uploads, which use `multipart/form-data`)*
 
+> [!WARNING]
+> **Security Notice:** The `x-clerk-user-id` header bypass is strictly intended for local loopback development (`http://localhost:3000`). Never expose a public cloudflare tunnel without an access policy or IP allowlist when `NODE_ENV !== 'production'`.
+
 ---
 
 ## 🛠️ Base URLs

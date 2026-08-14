@@ -94,7 +94,7 @@ async function createSession(
     clerkId: string,
     { resumeId, jobDescriptionId, sessionType = "MIXED", difficulty = "MEDIUM", durationMinutes = 30, noOfQuestions }: SessionDetailInput
 ) {
-    // 1. Fetch User
+    // 1. Fetch User & Guard initial credit state
     const user = await prisma.user.findUnique({
         where: { clerkId }
     });
@@ -135,13 +135,19 @@ async function createSession(
         noOfQuestions
     );
 
-    // 4. Atomic Database Transaction: Deduct Credit, Log Usage & Create Session
+    // 4. Atomic Database Transaction: Deduct Credit (Conditional Guard against TOCTOU race), Log Usage & Create Session
     const session = await prisma.$transaction(async (tx) => {
-        // A. Deduct User Credit
-        await tx.user.update({
-            where: { id: user.id },
+        // A. Conditional Credit Deduction (protects against concurrent requests)
+        const updateResult = await tx.user.updateMany({
+            where: { id: user.id, credits: { gte: 1 } },
             data: { credits: { decrement: 1 } }
         });
+
+        if (updateResult.count === 0) {
+            const error = new Error("Insufficient credits. Transaction aborted.") as any;
+            error.statusCode = 402;
+            throw error;
+        }
 
         // B. Create Interview Session
         const newSession = await tx.interviewSession.create({
@@ -173,7 +179,7 @@ async function createSession(
                 sessionId: newSession.id,
                 questionNo: q.questionNo,
                 questionText: q.questionText,
-                questionType: (q.questionType as SessionType) || "TECHNICAL"
+                questionType: q.questionType as SessionType
             }))
         });
 

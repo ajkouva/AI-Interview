@@ -152,9 +152,13 @@ async function deleteResume(clerkId: string, id: string) {
         throw error;
     }
 
-    // 1. Delete from ImageKit FIRST - throw if deletion fails
+    // 1. Delete from ImageKit with error resilience (treat missing file 404 as success)
     if (resume.fileId) {
-        await imagekit.deleteFile(resume.fileId);
+        try {
+            await imagekit.deleteFile(resume.fileId);
+        } catch (ikError) {
+            console.warn(`[ImageKit Warning] Could not delete file ${resume.fileId} (may already be deleted):`, ikError);
+        }
     }
 
     // 2. Delete from DB
