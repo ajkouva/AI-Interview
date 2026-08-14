@@ -1,4 +1,4 @@
-import { prisma } from "../config/db";
+import { prisma } from "../../config/db";
 import ImageKit from "imagekit";
 import { parsePDF, parseResumeWithAI } from "./resume.parser";
 
@@ -53,7 +53,7 @@ async function uploadResume(clerkId: string, userTitle: string | undefined, file
                 education: aiData.education ?? [],
                 projects: aiData.projects ?? [],
                 certifications: aiData.certifications ?? [],
-                contact: aiData.contact ?? {}
+                contact: (aiData.contact as any) ?? {}
             }
         });
 
@@ -123,11 +123,11 @@ async function getResumeById(clerkId: string, id: string) {
         throw error;
     }
 
-    const signedUrl = imagekit.url({
+    const signedUrl = resume.fileUrl ? imagekit.url({
         path: resume.fileUrl,
         signed: true,
         expireSeconds: 300
-    });
+    }) : null;
 
     return { ...resume, fileUrl: signedUrl };
 }
@@ -152,13 +152,9 @@ async function deleteResume(clerkId: string, id: string) {
         throw error;
     }
 
-    // 1. Delete from ImageKit
+    // 1. Delete from ImageKit FIRST - throw if deletion fails
     if (resume.fileId) {
-        try {
-            await imagekit.deleteFile(resume.fileId);
-        } catch (imgKitErr) {
-            console.error("Failed to delete file from ImageKit:", imgKitErr);
-        }
+        await imagekit.deleteFile(resume.fileId);
     }
 
     // 2. Delete from DB

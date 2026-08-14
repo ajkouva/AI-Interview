@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { getClerkUserId } from "../middlewares/auth";
 import { asyncHandler } from "../middlewares/asyncHandler";
-import resumeService from "../services/resume.services";
+import resumeService from "../services/resume/resume.services";
 
 const uploadResume = asyncHandler(async (req: Request, res: Response) => {
     const clerkId = getClerkUserId(req);
