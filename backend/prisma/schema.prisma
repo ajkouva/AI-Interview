@@ -43,9 +43,9 @@ model User {
 model Resume {
   id             String  @id @default(uuid())
   userId         String
-  fileId         String
-  fileUrl        String
-  fileName       String
+  fileId         String?
+  fileUrl        String?
+  fileName       String?
   title          String
   content        String?
   aiSummary      String?
@@ -54,13 +54,14 @@ model Resume {
   education      Json?
   projects       Json?
   certifications Json?
-  contact Json?
+  contact        Json?
 
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   sessions  InterviewSession[]
   owner     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("resumes")
 }
 
@@ -74,6 +75,7 @@ model JobDescription {
   sessions    InterviewSession[]
   owner       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("job_descriptions")
 }
 
@@ -99,6 +101,8 @@ model InterviewSession {
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   questions        Question[]
 
+  @@index([userId])
+  @@index([status])
   @@map("interview_sessions")
 }
 
@@ -113,6 +117,7 @@ model Question {
   answer       Answer?
   session      InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@index([sessionId])
   @@map("questions")
 }
 
@@ -130,6 +135,7 @@ model Answer {
   question     Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
   session      InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@index([sessionId])
   @@map("answers")
 }
 
@@ -146,6 +152,7 @@ model Payment {
   creditAdded    Int
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("payments")
 }
 
@@ -159,6 +166,7 @@ model CreditUsageLog {
   session     InterviewSession? @relation(fields: [sessionId], references: [id])
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("credit_usage_logs")
 }
 

@@ -1,4 +1,4 @@
-import jobService from "../services/job.services";
+import jobService from "../services/job/job.services";
 import type { Request, Response } from "express";
 import { getClerkUserId } from "../middlewares/auth";
 import { asyncHandler } from "../middlewares/asyncHandler";

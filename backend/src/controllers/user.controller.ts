@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { getClerkUserId } from '../middlewares/auth';
-import userService from '../services/user.services';
+import userService from '../services/user/user.services';
 import { asyncHandler } from '../middlewares/asyncHandler';
 
 const me = asyncHandler(async (req: Request, res: Response) => {

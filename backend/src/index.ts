@@ -3,12 +3,13 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
-import { clerkMiddleware, requireAuth, getAuth } from '@clerk/express';
+import { clerkMiddleware } from '@clerk/express';
 import userRouter from './routes/user.routes';
 import webhookRouter from './routes/webhook.routes';
 import jobRouter from './routes/job.routes';
-import { globalErrorHandler } from './middlewares/errorHandler';
 import resumeRouter from './routes/resume.routes';
+import sessionRouter from './routes/session.routes';
+import { globalErrorHandler } from './middlewares/errorHandler';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +24,7 @@ app.use(clerkMiddleware());
 app.use("/api/users", userRouter);
 app.use("/api/jobs", jobRouter);
 app.use("/api/resumes", resumeRouter);
+app.use("/api/sessions", sessionRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');
@@ -32,7 +34,6 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', runtime: 'bun', timestamp: new Date() });
 });
-
 
 // Global Error Handler (Must be last before app.listen)
 app.use(globalErrorHandler);
