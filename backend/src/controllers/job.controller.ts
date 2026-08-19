@@ -40,8 +40,19 @@ const getJobById = asyncHandler(async (req: Request, res: Response) => {
     res.status(200).json(job);
 });
 
+const deleteJob = asyncHandler(async (req: Request, res: Response) => {
+    const clerkId = getClerkUserId(req);
+    if (!clerkId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    const jobId = req.params.id as string;
+    const result = await jobService.deleteJob(jobId, clerkId);
+    res.status(200).json(result);
+});
+
 export default {
     createJob,
     getAllJobs,
-    getJobById
+    getJobById,
+    deleteJob
 };

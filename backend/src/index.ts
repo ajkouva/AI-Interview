@@ -10,6 +10,7 @@ import jobRouter from './routes/job.routes';
 import resumeRouter from './routes/resume.routes';
 import sessionRouter from './routes/session.routes';
 import { globalErrorHandler } from './middlewares/errorHandler';
+import answerRouter from './routes/answer.routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,6 +26,7 @@ app.use("/api/users", userRouter);
 app.use("/api/jobs", jobRouter);
 app.use("/api/resumes", resumeRouter);
 app.use("/api/sessions", sessionRouter);
+app.use("/api/answers", answerRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');

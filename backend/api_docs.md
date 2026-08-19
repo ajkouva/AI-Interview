@@ -197,7 +197,7 @@ Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini A
   "jobDescriptionId": "job-uuid-5678",
   "sessionType": "TECHNICAL",
   "difficulty": "MEDIUM",
-  "durationMinutes": 30,
+  "durationMinutes": 15,
   "noOfQuestions": 5
 }
 ```
@@ -211,7 +211,7 @@ Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini A
   "status": "ACTIVE",
   "sessionType": "TECHNICAL",
   "difficulty": "MEDIUM",
-  "durationMinutes": 30,
+  "durationMinutes": 15,
   "startedAt": "2026-08-14T15:00:00.000Z",
   "questions": [
     {
@@ -246,6 +246,43 @@ Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini A
 ### 4.3 Get Session Details By ID (`GET /api/sessions/:id`)
 * **Auth Required:** `Yes`
 * **Response (200 OK):** Specific `InterviewSession` object with questions included.
+
+---
+
+## 5️⃣ Answer Submission & AI Evaluation (`/api/sessions/:sessionId/answers`)
+
+### 5.1 Submit Answer for Real-Time Evaluation (`POST /api/sessions/:sessionId/answers`)
+Submits a candidate's answer (text or code) for a specific question within a session. Invokes Gemini AI to grade the response, computes scoring metrics, creates the answer record, and automatically completes the interview session when all questions have been answered.
+
+* **Auth Required:** `Yes`
+* **URL:** `POST /api/sessions/:sessionId/answers` (or `/api/answers` with `sessionId` in body)
+* **Request Body:**
+```json
+{
+  "questionId": "question-uuid-001",
+  "answerText": "Index scanning uses B-Trees in PostgreSQL to quickly locate row pointer offsets without reading full table pages.",
+  "codeSnippet": "CREATE INDEX idx_user_email ON users(email);",
+  "codeLanguage": "sql"
+}
+```
+* **Response (201 Created):**
+```json
+{
+  "message": "Answer evaluated and submitted successfully",
+  "data": {
+    "answerId": "answer-uuid-1111",
+    "questionId": "question-uuid-001",
+    "sessionId": "session-uuid-7777",
+    "aiScore": 8.5,
+    "aiFeedback": "Clear explanation of indexing mechanics with correct SQL syntax.",
+    "keywordHit": ["B-Tree", "Table Scan", "Index Pointer"],
+    "suggestedAnswer": "A comprehensive answer should cover B-Tree structure, how PostgreSQL scans index pages before reading table heaps, and when composite indexes are preferred.",
+    "confidenceLevel": "HIGH",
+    "isCompleted": false,
+    "remainingQuestions": 4
+  }
+}
+```
 
 ---
 

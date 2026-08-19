@@ -87,9 +87,12 @@ model InterviewSession {
   status           SessionStatus    @default(PENDING)
   sessionType      SessionType      @default(MIXED)
   difficulty       Difficulty       @default(MEDIUM)
-  durationMinutes  Int              @default(30)
+  durationMinutes  Int              @default(15)
   totalScore       Float?
   aiFeedback       String?
+  strengths        String[]         @default([])
+  areasToImprove   String[]         @default([])
+  competencyScores Json?
   durationSec      Int?
   startedAt        DateTime?
   endedAt          DateTime?
@@ -122,18 +125,20 @@ model Question {
 }
 
 model Answer {
-  id           String           @id @default(uuid())
-  questionId   String           @unique
-  sessionId    String
-  answerText   String?
-  codeSnippet  String?
-  codeLanguage String?
-  aiScore      Float?
-  aiFeedback   String?
-  keywordHit   Json?
-  answerAt     DateTime?        @default(now())
-  question     Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  session      InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id              String           @id @default(uuid())
+  questionId      String           @unique
+  sessionId       String
+  answerText      String?
+  codeSnippet     String?
+  codeLanguage    String?
+  aiScore         Float?
+  aiFeedback      String?
+  keywordHit      Json?
+  suggestedAnswer String?
+  confidenceLevel Float?
+  answerAt        DateTime?        @default(now())
+  question        Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  session         InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@map("answers")

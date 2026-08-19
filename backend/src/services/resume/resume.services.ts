@@ -152,12 +152,20 @@ async function deleteResume(clerkId: string, id: string) {
         throw error;
     }
 
-    // 1. Delete from ImageKit with error resilience (treat missing file 404 as success)
+    // 1. Delete from ImageKit storage (only ignore verified 404 Not Found errors)
     if (resume.fileId) {
         try {
             await imagekit.deleteFile(resume.fileId);
-        } catch (ikError) {
-            console.warn(`[ImageKit Warning] Could not delete file ${resume.fileId} (may already be deleted):`, ikError);
+        } catch (ikError: any) {
+            const statusCode = ikError?.$ResponseMetadata?.statusCode ?? ikError?.statusCode ?? ikError?.status;
+            if (statusCode === 404 || ikError?.message?.includes("404") || ikError?.message?.includes("not found")) {
+                console.warn(`[ImageKit Warning] File ${resume.fileId} was already removed from storage (404). Proceeding with DB cleanup.`);
+            } else {
+                console.error(`[ImageKit Error] Failed to delete file ${resume.fileId} from storage (HTTP ${statusCode}):`, ikError);
+                const storageError = new Error("Failed to delete resume file from cloud storage. Database record preserved.") as any;
+                storageError.statusCode = statusCode || 502;
+                throw storageError;
+            }
         }
     }
 
