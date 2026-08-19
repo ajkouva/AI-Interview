@@ -1,1089 +1,441 @@
 # 🤖 InterviewAI — AI-Powered Interview Platform
 
-> **Role of this document**: Senior AI Web Developer planning guide. No code — pure architecture, design, and strategy.
+> **Role of this document**: Master Engineering & Architecture Blueprint.
+> Covers the Dual-Engine Architecture (Practice Exam Assessment + Real-Time Voice Simulation), Cloud AI vs Local Models, Data Models, API Contracts, and Execution Roadmap.
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [System Architecture Diagram](#2-system-architecture-diagram)
-3. [Database Schema / Data Models](#3-database-schema--data-models)
-4. [ER Diagram](#4-er-diagram)
-5. [Tech Stack Document](#5-tech-stack-document)
-6. [Free Alternatives & Cost Breakdown](#6-free-alternatives--cost-breakdown)
-7. [MVP — Minimum Viable Product](#7-mvp--minimum-viable-product)
-8. [Feature Breakdown (All 7 Features)](#8-feature-breakdown-all-7-features)
-9. [Future Features](#9-future-features)
-10. [Project Roadmap](#10-project-roadmap)
-11. [Task Breakdown](#11-task-breakdown)
-12. [Workflow Diagrams](#12-workflow-diagrams)
+1. [Project Overview & Core Value Proposition](#1-project-overview--core-value-proposition)
+2. [System Architecture Diagram (Dual-Engine)](#2-system-architecture-diagram-dual-engine)
+3. [Model Selection: Local Voice vs Gemini Live API](#3-model-selection-local-voice-vs-gemini-live-api)
+4. [Database Schema & Data Models](#4-database-schema--data-models)
+5. [Tech Stack & Infrastructure Document](#5-tech-stack--infrastructure-document)
+6. [Dual-Engine Interview System Design](#6-dual-engine-interview-system-design)
+   - [Engine 1: 📝 Practice Exam / Online Assessment Mode](#engine-1--practice-exam--online-assessment-mode)
+   - [Engine 2: 🎙️ Live Voice & Code Simulation Mode](#engine-2-️-live-voice--code-simulation-mode)
+7. [Split-Screen Live Coding Environment](#7-split-screen-live-coding-environment)
+8. [Post-Interview Analytics & Report Card System](#8-post-interview-analytics--report-card-system)
+9. [Payment & Credit Tokenomics](#9-payment--credit-tokenomics)
+10. [API Routes Reference](#10-api-routes-reference)
+11. [Project Roadmap & Next Steps](#11-project-roadmap--next-steps)
 
 ---
 
-## 1. Project Overview
+## 1. Project Overview & Core Value Proposition
 
-**InterviewAI** is a full-stack AI-powered mock interview platform where users can:
+**InterviewAI** is an intelligent, full-stack AI interview preparation platform designed to help software engineers, developers, and tech candidates ace real-world technical and behavioral interviews.
 
-- Upload their resume and job description
-- Be interviewed in real-time by an AI using voice (STT + TTS)
-- Solve coding problems live in an integrated IDE
-- Receive AI-generated feedback after each session
-- Pay for premium features via a freemium model
-
-The platform also includes an **Admin Panel** for business analytics and a **Python AI microservice** for NLP-heavy tasks.
-
----
-
-## 2. System Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          CLIENT LAYER                               │
-│                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │  React App   │  │  Admin Panel │  │   Browser APIs           │  │
-│  │  (Vite/CRA)  │  │  (React)     │  │ (WebSpeech / MediaStream)│  │
-│  └──────┬───────┘  └──────┬───────┘  └────────────┬─────────────┘  │
-└─────────┼────────────────┼──────────────────────── ┼───────────────┘
-          │                │                          │
-          ▼                ▼                          ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         API GATEWAY LAYER                           │
-│                                                                     │
-│            Node.js + Express REST API (Main Backend)                │
-│            ┌─────────────────────────────────────┐                  │
-│            │  /api/auth  /api/interviews          │                  │
-│            │  /api/users /api/sessions            │                  │
-│            │  /api/resume /api/admin              │                  │
-│            │  /api/payments /api/code             │                  │
-│            └─────────────────────────────────────┘                  │
-│                     │                   │                           │
-│            WebSocket Server         REST Proxy                      │
-│          (Socket.io / ws)         (to Python AI)                    │
-└──────────────┬──────────────────────────┬──────────────────────────┘
-               │                          │
-    ┌──────────▼──────────┐   ┌──────────▼─────────────────┐
-    │    PostgreSQL DB     │   │   Python AI Microservice    │
-    │  (via Prisma ORM)   │   │   (FastAPI / Flask)         │
-    │                     │   │                             │
-    │  - Users            │   │  - Resume Parser (NLP)      │
-    │  - Interviews       │   │  - Question Generator       │
-    │  - Sessions         │   │  - Code Analyser            │
-    │  - Payments         │   │  - Answer Evaluator         │
-    │  - QA Logs          │   │  - Session Summarizer       │
-    └─────────────────────┘   └──────────┬──────────────────┘
-                                         │
-                              ┌──────────▼──────────────────┐
-                              │      AI/LLM Providers        │
-                              │                             │
-                              │  - Google Gemini API (Free) │
-                              │  - Groq API (Free tier)     │
-                              │  - OpenAI (optional paid)   │
-                              │  - HuggingFace Inference API│
-                              └─────────────────────────────┘
-
-VOICE PIPELINE:
-  Browser Mic → Web Speech API (STT, free, browser-native)
-              → Socket.io → Node → Python AI → LLM Response
-              → Python TTS (gTTS/edge-tts, free) → Audio Stream
-              → Browser Speaker
-
-STORAGE:
-  Resumes / Audio → Cloudinary (free tier) or local FS (dev)
-  Session Logs    → PostgreSQL JSON columns
-```
-
-### Key Architectural Decisions
-
-| Decision | Choice | Reason |
-|---|---|---|
-| Real-time comms | WebSockets (Socket.io) | Low latency for voice turns |
-| AI processing | Python microservice | Isolates heavy NLP; Python has best AI libs |
-| ORM | Prisma | Type-safe, great DX, easy migrations |
-| Voice input | Web Speech API | Free, browser-native, no server cost |
-| Voice output | edge-tts / gTTS | Free TTS, runs on your server |
-| Payments | Razorpay (India) / Stripe | Razorpay free to integrate; Stripe has sandbox |
+Candidates can:
+1. **Upload Resume & Target Job Descriptions**: Automatically parsed via ImageKit and Gemini AI into structured candidate profiles and skill matrices.
+2. **Dual-Mode Interview Preparation**:
+   - **Mode 1: Timed Practice Assessment** — Structured, card-by-card Q&A with live code runner and step-by-step scoring.
+   - **Mode 2: Live Voice & Code Simulation** — Real-time bidirectional voice call with Gemini Multimodal Live, featuring live code review and conversational interruptions.
+3. **Comprehensive Performance Analytics**: Instant post-session scoring, radar charts, strengths/weaknesses, and suggested model answers.
+4. **Freemium & Credit Economy**: Free tier onboarding with optional Razorpay/Stripe credit pack upgrades.
 
 ---
 
-## 3. Database Schema / Data Models
-
-### 3.1 Users Table
+## 2. System Architecture Diagram (Dual-Engine)
 
 ```
-users
-─────────────────────────────
-id            UUID (PK)
-email         VARCHAR(255) UNIQUE NOT NULL
-name          VARCHAR(100)
-password_hash VARCHAR(255)          -- null if OAuth
-avatar_url    VARCHAR(500)
-role          ENUM('user', 'admin') DEFAULT 'user'
-plan          ENUM('free', 'basic', 'pro') DEFAULT 'free'
-credits       INT DEFAULT 3         -- free credits for interview
-oauth_provider VARCHAR(50)          -- 'google' | 'github' | null
-oauth_id      VARCHAR(100)
-created_at    TIMESTAMP DEFAULT NOW()
-updated_at    TIMESTAMP
-```
-
-### 3.2 Resumes Table
-
-```
-resumes
-─────────────────────────────
-id            UUID (PK)
-user_id       UUID (FK → users.id)
-file_url      VARCHAR(500)          -- stored on Cloudinary / S3
-file_name     VARCHAR(200)
-parsed_text   TEXT                  -- extracted raw text
-ai_summary    TEXT                  -- AI-generated profile summary
-skills        JSONB                 -- ["React", "Python", ...]
-experience    JSONB                 -- [{company, role, years}, ...]
-education     JSONB
-uploaded_at   TIMESTAMP DEFAULT NOW()
-```
-
-### 3.3 Job Descriptions Table
-
-```
-job_descriptions
-─────────────────────────────
-id            UUID (PK)
-user_id       UUID (FK → users.id)
-title         VARCHAR(200)
-company       VARCHAR(200)
-description   TEXT
-required_skills JSONB
-ai_summary    TEXT                  -- AI parsed requirements
-created_at    TIMESTAMP DEFAULT NOW()
-```
-
-### 3.4 Interview Sessions Table
-
-```
-interview_sessions
-─────────────────────────────
-id            UUID (PK)
-user_id       UUID (FK → users.id)
-resume_id     UUID (FK → resumes.id)
-job_desc_id   UUID (FK → job_descriptions.id)
-status        ENUM('pending','active','completed','abandoned')
-type          ENUM('behavioral','technical','coding','mixed')
-difficulty    ENUM('easy','medium','hard')
-total_score   FLOAT                 -- AI-rated overall score (0-100)
-ai_feedback   TEXT                  -- Final AI-generated feedback
-duration_sec  INT                   -- Total session time in seconds
-started_at    TIMESTAMP
-ended_at      TIMESTAMP
-created_at    TIMESTAMP DEFAULT NOW()
-```
-
-### 3.5 Questions Table
-
-```
-questions
-─────────────────────────────
-id            UUID (PK)
-session_id    UUID (FK → interview_sessions.id)
-question_no   INT                   -- 1, 2, 3...
-question_text TEXT NOT NULL
-question_type ENUM('behavioral','technical','coding','hr')
-ai_voice_url  VARCHAR(500)          -- TTS audio URL (optional cache)
-asked_at      TIMESTAMP
-```
-
-### 3.6 Answers Table
-
-```
-answers
-─────────────────────────────
-id            UUID (PK)
-question_id   UUID (FK → questions.id)
-session_id    UUID (FK → interview_sessions.id)
-answer_text   TEXT                  -- STT-transcribed answer
-code_snippet  TEXT                  -- If it's a coding question
-code_language VARCHAR(50)
-ai_score      FLOAT                 -- Per-question score (0-10)
-ai_feedback   TEXT                  -- Per-answer AI feedback
-keywords_hit  JSONB                 -- Keywords the AI expected
-answered_at   TIMESTAMP
-```
-
-### 3.7 Payments Table
-
-```
-payments
-─────────────────────────────
-id            UUID (PK)
-user_id       UUID (FK → users.id)
-plan          ENUM('basic','pro')
-amount        DECIMAL(10,2)
-currency      VARCHAR(10) DEFAULT 'INR'
-gateway       VARCHAR(50)           -- 'razorpay' | 'stripe'
-gateway_order_id   VARCHAR(200)
-gateway_payment_id VARCHAR(200)
-status        ENUM('pending','success','failed','refunded')
-credits_added INT
-created_at    TIMESTAMP DEFAULT NOW()
-```
-
-### 3.8 Credit Usage Log Table
-
-```
-credit_usage_logs
-─────────────────────────────
-id            UUID (PK)
-user_id       UUID (FK → users.id)
-session_id    UUID (FK → interview_sessions.id)
-credits_used  INT
-action        VARCHAR(100)          -- 'interview_start' | 'resume_parse' | etc.
-used_at       TIMESTAMP DEFAULT NOW()
-```
-
-### 3.9 Admin Analytics (Materialized View)
-
-```
-admin_stats (refreshed view or separate table)
-─────────────────────────────
-total_users
-active_users_today
-total_sessions
-sessions_today
-revenue_total
-revenue_month
-avg_session_score
-top_job_roles
-top_skills_tested
-free_to_paid_conversion_rate
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             CLIENT LAYER (React / Vite)                     │
+│                                                                             │
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌─────────────────┐  │
+│  │ Mode 1: Practice Exam │  │ Mode 2: Live Voice UI │  │ Monaco Code IDE │  │
+│  │ (Card-by-Card Timed)  │  │ (Audio Visualizer)    │  │ (Split Screen)  │  │
+│  └───────────┬───────────┘  └───────────┬───────────┘  └────────┬────────┘  │
+└──────────────┼──────────────────────────┼───────────────────────┼───────────┘
+               │ (REST API)               │ (WebSocket Stream)    │
+               ▼                          ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    BUN BACKEND GATEWAY (Bun + Express)                      │
+│                                                                             │
+│   ┌───────────────────────────────┐   ┌─────────────────────────────────┐   │
+│   │ REST API Router (/api/...)    │   │ Bun WebSocket Server (/ws/...)  │   │
+│   │ - /api/users (Clerk + Svix)   │   │ - Audio Stream Relay (PCM)      │   │
+│   │ - /api/jobs (CRUD)            │   │ - Live Closed-Caption Stream    │   │
+│   │ - /api/resumes (ImageKit/PDF) │   │ - Code Snippet Event Dispatch   │   │
+│   │ - /api/sessions & /api/answers│   │ - Live Session Buffer           │   │
+│   └──────────────┬────────────────┘   └────────────────┬────────────────┘   │
+└──────────────────┼─────────────────────────────────────┼────────────────────┘
+                   │                                     │
+        ┌──────────▼──────────┐               ┌──────────▼─────────────────┐
+        │    PostgreSQL DB     │               │   Google Gemini AI Engine   │
+        │  (via Prisma ORM)   │               │   (@google/genai SDK v2)    │
+        │                     │               │                             │
+        │  - Users & Credits  │               │  - gemini-2.5-flash         │
+        │  - Resumes & Jobs   │               │    (Structured Zod Parsing) │
+        │  - Sessions & Trans │               │  - gemini-2.0-flash-exp     │
+        │  - Questions & Answ │               │    (Multimodal Live Voice)  │
+        │  - Payments & Logs  │               │                             │
+        └─────────────────────┘               └─────────────────────────────┘
 ```
 
 ---
 
-## 4. ER Diagram
+## 3. Model Selection: Local Voice vs Gemini Live API
 
-```
-┌──────────┐         ┌────────────────┐        ┌──────────────────┐
-│  users   │ 1     * │    resumes     │        │ job_descriptions │
-│──────────│─────────│────────────────│        │──────────────────│
-│ id (PK)  │         │ id (PK)        │        │ id (PK)          │
-│ email    │         │ user_id (FK)   │        │ user_id (FK)     │
-│ name     │         │ file_url       │        │ title            │
-│ plan     │         │ parsed_text    │        │ description      │
-│ credits  │         │ ai_summary     │        │ ai_summary       │
-│ role     │         │ skills (JSON)  │        │ required_skills  │
-└────┬─────┘         └────────────────┘        └─────────┬────────┘
-     │                                                   │
-     │ 1                                                 │
-     │                                                   │
-     ▼ *                                                 │
-┌────────────────────────────────────────────────────────▼────────┐
-│                     interview_sessions                          │
-│─────────────────────────────────────────────────────────────────│
-│ id (PK)                                                         │
-│ user_id (FK) ──────────────────────────────────── → users       │
-│ resume_id (FK) ────────────────────────────────── → resumes     │
-│ job_desc_id (FK) ──────────────────────────────── → job_descs   │
-│ status | type | difficulty | total_score | ai_feedback          │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │ 1
-                            ▼ *
-                   ┌────────────────┐
-                   │   questions    │
-                   │────────────────│
-                   │ id (PK)        │
-                   │ session_id(FK) │
-                   │ question_text  │
-                   │ question_type  │
-                   └───────┬────────┘
-                           │ 1
-                           ▼ 1
-                   ┌────────────────┐
-                   │    answers     │
-                   │────────────────│
-                   │ id (PK)        │
-                   │ question_id(FK)│
-                   │ answer_text    │
-                   │ code_snippet   │
-                   │ ai_score       │
-                   │ ai_feedback    │
-                   └────────────────┘
+| Comparison Dimension | 💻 Local Voice / Local LLM Stack | ☁️ Google Gemini 2.0 Flash Live API |
+| :--- | :--- | :--- |
+| **Context Window** | **Tiny (4K – 8K tokens)**. Easily overflows with long resumes + job specs + multi-turn conversations. | **Huge (1,000,000+ tokens)**. Effortlessly retains entire resumes, full job descriptions, and 45-minute calls. |
+| **Latency** | **Slow (2.5s – 4.5s waterfall)**. Audio ➔ Local Whisper ➔ Local Llama ➔ Local TTS. | **Ultra-Fast (<500ms)**. Native bidirectional audio-to-audio streaming without STT/TTS chaining. |
+| **Reasoning & Smarts** | **Medium**. Smaller 7B/8B parameter models struggle with complex system design & code debugging. | **State-of-the-art**. Advanced coding, logic, and nuanced conversational feedback. |
+| **Infrastructure Cost** | **High ($50–$200/mo)**. Requires dedicated GPU servers (NVIDIA RTX/A10G VRAM). | **$0 / Free Tier**. Free on Google AI Studio for developers and low per-minute pricing at scale. |
+| **Verdict** | ❌ Not practical for production SaaS | ✅ **Selected Choice for InterviewAI** |
 
-┌──────────┐ 1    * ┌────────────┐
-│  users   │────────│  payments  │
-└──────────┘        └────────────┘
+---
 
-┌──────────┐ 1    * ┌──────────────────┐
-│  users   │────────│ credit_usage_logs│
-└──────────┘        └──────────────────┘
+## 4. Database Schema & Data Models
+
+### 4.1 Prisma Schema (`schema.prisma`)
+
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+enum Plan {
+  FREE
+  BASIC
+  PRO
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum SessionType {
+  BEHAVIORAL
+  TECHNICAL
+  CODING
+  MIXED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum InterviewMode {
+  ASSESSMENT    // Mode 1: Practice Exam / Turn-Based
+  LIVE_VOICE    // Mode 2: Real-time Gemini Live Voice Stream
+}
+
+model User {
+  id               String              @id @default(uuid())
+  clerkId          String              @unique
+  email            String              @unique
+  username         String?             @unique
+  fullName         String?
+  avatarUrl        String?
+  authProvider     String              @default("clerk")
+  role             Role                @default(USER)
+  plan             Plan                @default(FREE)
+  credits          Int                 @default(3)
+  isOnboarded      Boolean             @default(false)
+  college          String?
+  bio              String?
+  targetRole       String?
+  experienceLevel  String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  resumes          Resume[]
+  jobDescriptions  JobDescription[]
+  sessions         InterviewSession[]
+  payments         Payment[]
+  creditLogs       CreditUsageLog[]
+
+  @@index([clerkId])
+  @@index([email])
+}
+
+model Resume {
+  id           String             @id @default(uuid())
+  userId       String
+  fileUrl      String
+  fileName     String
+  fileId       String?
+  content      String?
+  aiSummary    String?
+  skills       Json?
+  experience   Json?
+  createdAt    DateTime           @default(now())
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions     InterviewSession[]
+
+  @@index([userId])
+}
+
+model JobDescription {
+  id           String             @id @default(uuid())
+  userId       String
+  title        String
+  description  String
+  createdAt    DateTime           @default(now())
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions     InterviewSession[]
+
+  @@index([userId])
+}
+
+model InterviewSession {
+  id               String             @id @default(uuid())
+  userId           String
+  resumeId         String
+  jobDescriptionId String
+  status           SessionStatus      @default(ACTIVE)
+  sessionType      SessionType        @default(MIXED)
+  difficulty       Difficulty         @default(MEDIUM)
+  interviewMode    InterviewMode      @default(ASSESSMENT)
+  durationMinutes  Int                @default(30)
+  totalScore       Float?
+  aiFeedback       String?
+  transcript       Json?              // Live Voice Conversation Log
+  voiceName        String?            @default("Puck")
+  startedAt        DateTime           @default(now())
+  endedAt          DateTime?
+  createdAt        DateTime           @default(now())
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume           Resume             @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  jobDescription   JobDescription     @relation(fields: [jobDescriptionId], references: [id], onDelete: Cascade)
+  questions        Question[]
+  answers          Answer[]
+  creditLogs       CreditUsageLog[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Question {
+  id           String             @id @default(uuid())
+  sessionId    String
+  questionNo   Int
+  questionText String
+  questionType SessionType        @default(MIXED)
+  createdAt    DateTime           @default(now())
+
+  session      InterviewSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answer       Answer?
+
+  @@index([sessionId])
+}
+
+model Answer {
+  id           String             @id @default(uuid())
+  questionId   String             @unique
+  sessionId    String
+  answerText   String?
+  codeSnippet  String?
+  codeLanguage String?
+  aiScore      Float?
+  aiFeedback   String?
+  keywordHit   Json?
+  answerAt     DateTime           @default(now())
+
+  question     Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  session      InterviewSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model Payment {
+  id                 String           @id @default(uuid())
+  userId             String
+  amount             Decimal          @db.Decimal(10, 2)
+  currency           String           @default("INR")
+  gateway            String           // "razorpay" | "stripe"
+  gatewayOrderId     String           @unique
+  gatewayPaymentId   String?
+  status             String           @default("PENDING")
+  creditsPurchased   Int
+  createdAt          DateTime         @default(now())
+
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CreditUsageLog {
+  id          String            @id @default(uuid())
+  userId      String
+  sessionId   String?
+  creditsUsed Int               @default(1)
+  action      String            // "CREATE_INTERVIEW_SESSION"
+  createdAt   DateTime          @default(now())
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session     InterviewSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
 ```
 
 ---
 
-## 5. Tech Stack Document
+## 5. Tech Stack & Infrastructure Document
 
-### Frontend
+### Backend (Bun Runtime)
+* **Runtime**: **Bun** (Ultra-fast startup, native WebSocket server, high-performance HTTP).
+* **Framework**: **Express.js** mounted on Bun.
+* **Database & ORM**: **PostgreSQL 16** via **Prisma ORM 7**.
+* **Authentication**: **Clerk Express** (`clerkMiddleware` + `getAuth`) with Svix webhook sync.
+* **Storage**: **ImageKit** with private folders and signed expiring download URLs.
+* **AI Engine**: **`@google/genai` (Google GenAI SDK v2)**:
+  - `gemini-2.5-flash` for structured Zod JSON parsing & validation.
+  - `gemini-2.0-flash-exp` for real-time Multimodal Live WebSockets.
 
-| Category | Technology | Why |
-|---|---|---|
-| Framework | **React 18** (Vite) | Fast, component-based, huge ecosystem |
-| Routing | **React Router v6** | Industry standard |
-| State Management | **Zustand** | Lightweight, no boilerplate vs Redux |
-| Styling | **Tailwind CSS** | Utility-first, rapid UI dev |
-| UI Components | **shadcn/ui** | Beautiful, headless, copy-paste components |
-| Code Editor | **Monaco Editor** (React) | Same as VS Code — perfect for coding interviews |
-| Voice Input | **Web Speech API** (browser-native) | Free, no API key needed |
-| Real-time | **Socket.io-client** | Matches server |
-| Forms | **React Hook Form + Zod** | Type-safe form validation |
-| HTTP Client | **Axios** | Simple REST requests |
-| Charts (Admin) | **Recharts** | Free, React-native charting |
-| PDF Upload | **react-dropzone** | Drag-and-drop file uploads |
-| Auth tokens | **jwt-decode** | Decode JWTs on client |
-
-### Backend (Node.js)
-
-| Category | Technology | Why |
-|---|---|---|
-| Runtime | **Node.js 20+** | JS everywhere |
-| Framework | **Express.js** | Minimal, flexible, huge middleware ecosystem |
-| Real-time | **Socket.io** | WebSocket abstraction, rooms, namespaces |
-| ORM | **Prisma** | Type-safe DB access, auto migrations |
-| Database | **PostgreSQL 16** | Relational, JSONB support, rock-solid |
-| Auth | **JWT + bcryptjs** | Stateless auth |
-| OAuth | **Passport.js** (Google strategy) | Social login |
-| File Upload | **Multer** | Middleware for multipart/form-data |
-| PDF Parsing | **pdf-parse** (Node) | Extract text from resume PDFs |
-| Validation | **Zod** | Shared schema validation |
-| Task Queue | **Bull / BullMQ** | Background jobs (resume parsing, feedback gen) |
-| Rate Limiting | **express-rate-limit** | Protect endpoints |
-| CORS | **cors** package | Handle cross-origin |
-| Env | **dotenv** | Environment variables |
-| Logging | **Winston** | Structured logging |
-
-### AI Microservice (Python)
-
-| Category | Technology | Why |
-|---|---|---|
-| Framework | **FastAPI** | Async, auto Swagger docs, fast |
-| LLM Client | **Google Generative AI SDK** | Gemini 1.5 Flash (free tier) |
-| Alt LLM | **Groq SDK** | Llama 3 — very fast, free tier |
-| PDF Parsing | **PyMuPDF / pdfplumber** | Better PDF parsing than Node |
-| TTS | **edge-tts** | Microsoft Azure TTS, free, high quality |
-| Alt TTS | **gTTS** | Google TTS, free |
-| STT | Browser Web Speech API | Free, client-side — no Python needed |
-| Code Analysis | **Gemini API** | Analyse user's code, give feedback |
-| NLP/Embeddings | **sentence-transformers** | Optional: semantic matching |
-| HTTP Client | **httpx** | Async HTTP for internal calls |
-
-### Database & Storage
-
-| Category | Technology | Free Plan |
-|---|---|---|
-| Database | **PostgreSQL** (Neon.tech) | 0.5 GB free, serverless |
-| Cache | **Redis** (Upstash) | 10k req/day free |
-| File Storage | **Cloudinary** | 25 GB free storage + bandwidth |
-| Alt Storage | **Supabase Storage** | 1 GB free |
-
-### DevOps & Deployment (All Free)
-
-| Service | Free Platform |
-|---|---|
-| Frontend | **Vercel** (free hobby tier) |
-| Backend (Node) | **Render.com** (free 750hr/month) |
-| AI Microservice | **Railway.app** or **Render** (free tier) |
-| PostgreSQL | **Neon.tech** (free serverless Postgres) |
-| Redis | **Upstash** (free serverless Redis) |
-| CI/CD | **GitHub Actions** (free for public repos) |
-| Monitoring | **Sentry** (free tier, error tracking) |
-
-### Payments
-
-| Option | Notes |
-|---|---|
-| **Razorpay** | Best for India — free to integrate, charges per transaction only |
-| **Stripe** | International — free sandbox, 2.9% + 30c per live transaction |
-| **Cashfree** | India alternative, competitive rates |
-
-> Recommendation: Use Razorpay if targeting India. Stripe for international. Both have free sandboxes for development.
+### Frontend (React 18 + Vite)
+* **Build Tool**: Vite.
+* **UI Components**: Tailwind CSS + shadcn/ui.
+* **Code Editor**: `@monaco-editor/react` (VS Code engine in the browser).
+* **Voice & Audio**: Web Audio API (PCM 16kHz audio capture & playback buffer).
+* **State Management**: Zustand.
 
 ---
 
-## 6. Free Alternatives & Cost Breakdown
+## 6. Dual-Engine Interview System Design
 
-### AI APIs (Free Tiers)
-
-| API | Free Limit | Use Case |
-|---|---|---|
-| **Google Gemini 1.5 Flash** | 15 req/min, 1M tokens/day | Main LLM — question gen, analysis |
-| **Groq (Llama 3)** | 14,400 req/day | Fast inference, alt LLM |
-| **HuggingFace Inference API** | 1000 req/day | Embeddings, small models |
-| **OpenAI** | No free tier (avoid for now) | — |
-
-### Voice (Free)
-
-| Technology | Cost | Notes |
-|---|---|---|
-| **Web Speech API** (STT) | FREE | Browser native, Chrome/Edge |
-| **edge-tts** (TTS) | FREE | Runs on your server, Azure voices |
-| **gTTS** (TTS) | FREE | Google Translate TTS |
-| **ResponsiveVoice** | Free tier | Web-based TTS alternative |
-
-### Monthly Cost (Zero Budget Mode)
-
-```
-Hosting (Render/Vercel/Railway)  →  $0
-Database (Neon.tech free)         →  $0
-Redis (Upstash free)              →  $0
-File Storage (Cloudinary free)    →  $0
-AI API (Gemini free tier)         →  $0
-TTS (edge-tts self-hosted)        →  $0
-STT (Web Speech API)              →  $0
-CI/CD (GitHub Actions)            →  $0
-─────────────────────────────────────
-TOTAL MONTHLY (Dev/MVP)           →  $0
-```
+### Engine 1: 📝 Practice Exam / Online Assessment Mode
+* **Format**: Card-by-card timed online test.
+* **Flow**:
+  1. `POST /api/sessions` ➔ Generates 5–10 structured questions in advance.
+  2. Candidate reads question, writes text or runs code in Monaco Editor.
+  3. `POST /api/sessions/:sessionId/answers` ➔ Gemini evaluates single answer in real-time, grades 0.0–10.0, and delivers feedback.
+  4. Once all questions are answered, session status moves to `COMPLETED` and calculates overall score.
 
 ---
 
-## 7. Full Project Scope (Skip MVP)
-
-The user has chosen to bypass the MVP phase and build the **Full Project** from the start. This means all features will be built cohesively rather than splitting into phases.
-
-### Core Included Features (Full Scope):
-
-1. **User Auth** — Clerk integration (Email, OAuth, Webhooks)
-2. **Resume Upload** — PDF upload via Multer → Cloudinary/S3 → Python AI parser
-3. **Job Description Input** — Structured text form for targeted interviews
-4. **Interview Session** — AI generates 5-7 questions based on resume + JD
-5. **Voice Interview** — STT (Web Speech API) input + TTS (edge-tts) audio output
-6. **Coding Environment** — Integrated Monaco Editor for live technical questions
-7. **Q&A + Code Analysis** — AI analyzes spoken answers AND submitted code
-8. **Session Save & Feedback** — Store all Q&As and code in DB, generate AI summary
-9. **Credit & Payment System** — Freemium model (Razorpay/Stripe) for purchasing credits
-10. **Admin Panel** — Full dashboard for managing users, sessions, and analytics
-11. **User Dashboard** — View past sessions, detailed feedback, and credit balance
-
-### MVP User Flow
-
-```
-Register → Upload Resume → Enter Job Description
-    → Start Interview → AI greets with voice
-    → AI asks question (TTS audio + text shown)
-    → User speaks answer (STT transcribes)
-    → AI evaluates + asks next question
-    → [5-7 rounds]
-    → Interview ends → AI gives feedback
-    → Session saved → View in dashboard
-```
-
-### MVP Pages
-
-| Page | Path | Description |
-|---|---|---|
-| Landing Page | `/` | Hero, features, CTA |
-| Register | `/register` | Email + password |
-| Login | `/login` | Auth form |
-| Dashboard | `/dashboard` | Past sessions list |
-| Upload Resume | `/setup/resume` | PDF upload |
-| Job Description | `/setup/job` | Text input |
-| Interview Room | `/interview/:id` | Voice + Q&A panel |
-| Feedback | `/interview/:id/feedback` | Post-session review |
+### Engine 2: 🎙️ Live Voice & Code Simulation Mode
+* **Format**: Real-time conversational interview over WebSockets (Zoom/Google Meet style).
+* **Flow**:
+  1. `POST /api/sessions` with `interviewMode: "LIVE_VOICE"`.
+  2. Frontend opens WebSocket connection: `ws://localhost:3000/ws/interview/:sessionId`.
+  3. Backend injects candidate's resume + target job context into Gemini Live setup.
+  4. Candidate speaks into mic; Gemini speaks response aloud (<500ms latency).
+  5. If candidate struggles, AI offers hints; if candidate excels, AI dives deeper.
+  6. On session completion, backend collects full transcript and runs holistic post-interview evaluation.
 
 ---
 
-## 8. Feature Breakdown (All 7 Features)
+## 7. Split-Screen Live Coding Environment
 
-### Feature 1: Real-time Voice Interview
+During live technical interviews, the frontend presents a synchronized split-screen:
+* **Left Panel**: AI Voice Audio Visualizer & Real-time Live Closed Captions.
+* **Right Panel**: Monaco Code Editor with syntax highlighting (TypeScript, Python, JavaScript, SQL, Go, Java).
 
-**How it works:**
-- User clicks "Start Interview" → mic permission requested
-- Web Speech API's `SpeechRecognition` listens continuously
-- Transcribed text sent to Node backend via Socket.io
-- Node forwards to Python AI microservice
-- Python generates next question + TTS audio
-- Audio played on browser via `<audio>` element
-- UI shows both the AI question text and the user's transcribed answer
-
-**Technical Flow:**
-```
-Mic → Web Speech API → Socket.io (text) → Node → Python FastAPI
-    → Gemini API (next question) → edge-tts (audio bytes)
-    → Socket.io (audio back) → Browser plays audio
-```
-
-**Socket.io Events:**
-- `interview:start` — Initialize session
-- `interview:answer` — User's transcribed answer
-- `interview:question` — AI's next question + audio
-- `interview:end` — End session trigger
-- `interview:feedback` — Final AI feedback
-
----
-
-### Feature 2: AI Voice + Q&A Panel
-
-**UI Layout:**
-```
-┌─────────────────────────────────────────────────────┐
-│              InterviewAI — Session Active            │
-│─────────────────────────────────────────────────────│
-│  AI Avatar (animated)   │   Timer: 00:12:34          │
-│─────────────────────────────────────────────────────│
-│                                                     │
-│  AI QUESTION (TTS playing):                          │
-│  "Tell me about a time you handled a difficult      │
-│   team situation..."                                 │
-│                                                     │
-│─────────────────────────────────────────────────────│
-│                                                     │
-│  YOUR ANSWER (live transcription):                  │
-│  "I once worked on a project where the deadline...  │
-│   [recording indicator]"                             │
-│                                                     │
-│─────────────────────────────────────────────────────│
-│  Question 2 of 7   [Skip] [End Interview]           │
-└─────────────────────────────────────────────────────┘
-```
-
-**Past Q&A Log:**
-- Shows previous questions + answers as a chat transcript
-- Allows review during session
+### Real-Time WebSocket Code Event Protocol:
+1. **AI Prompts Code Challenge**:
+   ```json
+   {
+     "type": "CODING_PROMPT",
+     "language": "typescript",
+     "starterCode": "function longestSubstring(s: string): number {\n  // Code here\n}"
+   }
+   ```
+2. **Candidate Explains While Typing**: Mic audio streams in real-time while candidate types.
+3. **Candidate Submits Solution**:
+   ```json
+   {
+     "type": "SUBMIT_CODE",
+     "code": "function longestSubstring(s) { ... }",
+     "language": "typescript"
+   }
+   ```
+4. **Instant Spoken Review**: AI reviews code in < 1s and speaks review aloud.
 
 ---
 
-### Feature 3: Coding Environment
+## 8. Post-Interview Analytics & Report Card System
 
-**UI Layout (Split View):**
-```
-┌───────────────────────┬─────────────────────────────┐
-│   AI Question Panel   │    Monaco Code Editor       │
-│                       │                             │
-│  "Write a function to │  Language: Python           │
-│   reverse a linked   │  ──────────────────────      │
-│   list in O(n) time" │  def reverse_linked_list(   │
-│                       │    head: Node               │
-│  [Hint] [Submit]      │  ) -> Node:                 │
-│                       │      # your code here       │
-│  AI Feedback:         │      pass                   │
-│  "Good approach!      │                             │
-│   Consider edge       │  [Run] [Submit to AI]       │
-│   cases..."           │                             │
-└───────────────────────┴─────────────────────────────┘
-```
+When a session completes, Gemini produces an in-depth candidate performance summary:
 
-**How Code Analysis Works:**
-1. User writes code in Monaco Editor
-2. Clicks "Submit to AI"
-3. Code + question sent to Python AI service
-4. Python sends to Gemini: "Analyze this code: [code]. Question was: [question]"
-5. AI returns: correctness, time complexity, suggestions
-6. Displayed in AI feedback panel
-
-**Package:** `@monaco-editor/react` — free, no license needed
+* **Overall Readiness Score**: 0% – 100%.
+* **Competency Radar Matrix**:
+  - Technical Knowledge (0–100%)
+  - Coding & Problem Solving (0–100%)
+  - Communication & Articulation (0–100%)
+  - System Design & Architecture (0–100%)
+* **Key Strengths**: Specific highlights from candidate's answers.
+* **Actionable Improvement Plan**: Clear study roadmap to fix weak areas.
+* **Model Suggested Answers**: Gold-standard answers for questions candidate missed.
 
 ---
 
-### Feature 4: Resume + Job Description Analysis
+## 9. Payment & Credit Tokenomics
 
-**Resume Processing Pipeline:**
-```
-User uploads PDF
-      ↓
-Node backend receives (Multer)
-      ↓
-Forward to Python service
-      ↓
-PyMuPDF extracts text
-      ↓
-Gemini API prompt:
-  "Extract from this resume:
-   1. Name, email, skills list
-   2. Years of experience per technology
-   3. Most recent role and company
-   4. Education details
-   Return as structured JSON"
-      ↓
-Store structured data in DB (resumes table)
-      ↓
-Used as context for interview question generation
-```
-
-**Interview Context Prompt Pattern:**
-```
-System: You are an expert interviewer.
-Candidate Profile: {ai_summary from resume}
-Job Role: {job title and description}
-Interview Type: {behavioral | technical | mixed}
-Difficulty: {easy | medium | hard}
-
-Generate interview questions that are:
-- Relevant to their experience level
-- Specific to the tech stack mentioned in their resume
-- Appropriate for the job they're applying to
-```
+* **Freemium Allocation**: 3 Free Mock Interview Credits on onboarding.
+* **Credit Consumption**: 1 Credit deducted per created interview session.
+* **Credit Top-Up Packs (Razorpay / Stripe)**:
+  - **Starter Pack**: 5 Interviews = ₹499 ($10)
+  - **Pro Pack**: 20 Interviews = ₹1,499 ($25)
+  - **Unlimited Pass**: ₹2,499/month ($39/mo)
 
 ---
 
-### Feature 5: Session Recording & Save
+## 10. API Routes Reference
 
-**What Gets Saved:**
-```
-interview_sessions
-├── metadata (duration, score, status)
-├── questions[] (all AI questions asked)
-│   └── answers[] (user's spoken answers + code)
-│       └── ai_feedback per answer
-└── final_feedback (overall AI assessment)
-```
+### Authentication & Users
+* `GET /api/users/me` — Current user profile & onboarding status.
+* `POST /api/users/onboarding` — Update profile & target career details.
+* `POST /api/webhooks/clerk` — Svix-verified user sync webhook.
 
-**Post-Session Feedback Page includes:**
-- Overall score (0-100)
-- Per-question score
-- Strengths identified
-- Areas for improvement
-- Sample better answers for weak questions
-- Downloadable PDF report (optional, Phase 2)
+### Job Descriptions
+* `POST /api/jobs` — Create target job role.
+* `GET /api/jobs` — List user's job targets.
+* `GET /api/jobs/:id` — Get single job details.
+* `DELETE /api/jobs/:id` — Delete job target.
 
----
+### Resumes
+* `POST /api/resumes/upload` — Upload PDF (ImageKit + Gemini extraction).
+* `GET /api/resumes` — List uploaded resumes.
+* `GET /api/resumes/:id` — Get resume details & AI parsed skills.
+* `DELETE /api/resumes/:id` — Delete resume from DB & ImageKit.
 
-### Feature 6: Payment Gateway (Freemium)
+### Sessions & Evaluations (Engine 1: Practice Exam)
+* `POST /api/sessions` — Create interview session (deducts 1 credit).
+* `GET /api/sessions` — List all past interview sessions.
+* `GET /api/sessions/latest` — Get latest session.
+* `GET /api/sessions/:id` — Get session details with questions.
+* `POST /api/sessions/:sessionId/answers` — Submit answer for real-time evaluation.
 
-**Pricing Model:**
-
-| Plan | Price | Credits | Features |
-|---|---|---|---|
-| Free | Rs 0 | 3 interviews | Basic Q&A, no coding env |
-| Basic | Rs 199/month | 15 interviews | + Coding env, PDF feedback |
-| Pro | Rs 499/month | Unlimited | + Priority AI, analytics |
-
-**Payment Flow (Razorpay):**
-```
-User clicks "Upgrade"
-    → Node creates Razorpay Order (server-side)
-    → Frontend loads Razorpay checkout widget
-    → User pays
-    → Razorpay webhook → Node verifies signature
-    → Node updates user.plan + user.credits in DB
-    → Node logs in payments table
-    → User redirected to success page
-```
-
-**Security Rule:** Always verify payment server-side using Razorpay signature. Never trust frontend payment confirmation alone.
+### Live Voice Gateway (Engine 2: Live Voice Simulation)
+* `WS /ws/interview/:sessionId` — Bidirectional PCM audio streaming & Monaco code sync.
 
 ---
 
-### Feature 7: Admin Panel
-
-**Admin Dashboard Sections:**
-
-| Section | Metrics Shown |
-|---|---|
-| Overview | Total users, DAU, total sessions, revenue |
-| Users | Table of all users, plan, join date, usage |
-| Sessions | All interview sessions, status, scores |
-| Payments | Payment history, revenue charts |
-| AI Usage | API calls per day, credit consumption |
-| Reports | Conversion funnel, retention stats |
-
-**Admin Access Control:**
-- `role = 'admin'` in users table
-- Admin routes protected with `isAdmin` middleware
-- Separate `/admin` route prefix
-
----
-
-## 9. Future Features
-
-### Phase 3 — Intelligence Upgrades
-- AI Interviewer Personas — Choose between "Strict Google Interviewer", "Friendly Startup" etc.
-- Multi-language Support — Interview in Hindi, Spanish, etc.
-- Video Recording — Record face + audio, store session replay
-- Emotion Analysis — Detect confidence from voice tone
-- Mock Group Interviews — Multiple AI interviewers simulated
-
-### Phase 4 — Platform Expansion
-- Company-Specific Prep — Amazon, Google, Microsoft interview patterns
-- Interview Scheduler — Schedule mock interviews for a specific date/time
-- Peer Interview Mode — Two users interview each other (gamified)
-- Mentor Marketplace — Real humans can review AI sessions and give feedback
-- LinkedIn Integration — Auto-pull profile instead of resume upload
-
-### Phase 5 — Business Features
-- B2B / Enterprise — Companies use platform to pre-screen candidates
-- White-label — Coding bootcamps and universities buy the platform
-- API Access — Developers can integrate InterviewAI into their apps
-- Affiliate Program — Referral credits system
-
----
-
-## 10. Project Roadmap
-
-```
-PHASE 1 — Foundation (Weeks 1-4)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 1: Project setup, DB schema, auth (register/login)
-Week 2: Resume upload + Python AI parsing service
-Week 3: Interview session creation, question generation
-Week 4: Basic Q&A panel (text-only first, no voice yet)
-
-PHASE 2 — Voice MVP (Weeks 5-8)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 5: Web Speech API STT integration, Socket.io setup
-Week 6: TTS (edge-tts) integration, real-time voice loop
-Week 7: Session save, feedback generation, dashboard
-Week 8: Testing, bug fixes, deploy to free hosting
-
->>> DEMO-READY MVP AT END OF WEEK 8 <<<
-
-PHASE 3 — Full Features (Weeks 9-14)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 9:  Monaco Editor coding environment
-Week 10: Code AI analysis integration
-Week 11: Payment gateway (Razorpay)
-Week 12: Credits/freemium system
-Week 13: Admin panel — user/session management
-Week 14: Admin panel — analytics charts
-
-PHASE 4 — Polish & Launch (Weeks 15-18)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 15: OAuth (Google login)
-Week 16: UI/UX polish, mobile responsiveness
-Week 17: Performance optimization, caching
-Week 18: Public launch, social media, ProductHunt
-```
-
----
-
-## 11. Task Breakdown
-
-### Backend Tasks (Node.js + Express)
-
-#### Auth Module
-- [ ] Set up Express project structure (MVC pattern)
-- [ ] Install & configure Prisma with PostgreSQL
-- [ ] Write Prisma schema for all models
-- [ ] `POST /api/auth/register` — hash password, create user
-- [ ] `POST /api/auth/login` — validate, return JWT
-- [ ] JWT middleware for protected routes
-- [ ] `POST /api/auth/refresh` — refresh token
-- [ ] `GET /api/auth/me` — current user profile
-
-#### Resume Module
-- [ ] Configure Multer for PDF file uploads
-- [ ] `POST /api/resume/upload` — upload + forward to Python
-- [ ] `GET /api/resume/:id` — fetch resume details
-- [ ] `GET /api/resume/mine` — user's resumes
-
-#### Job Description Module
-- [ ] `POST /api/jobs` — save job description
-- [ ] `GET /api/jobs/:id` — fetch JD
-- [ ] `GET /api/jobs/mine` — user's saved JDs
-
-#### Interview Module
-- [ ] `POST /api/interview/create` — create session, link resume + JD
-- [ ] `GET /api/interview/:id` — get session details + Q&A
-- [ ] `GET /api/interview/mine` — user's all sessions
-- [ ] `PATCH /api/interview/:id/end` — mark complete, store feedback
-- [ ] Socket.io server setup
-- [ ] Handle `interview:start` event — context setup
-- [ ] Handle `interview:answer` event — forward to Python AI
-- [ ] Emit `interview:question` event with audio + text
-- [ ] Handle `interview:end` event — trigger feedback gen
-
-#### Payments Module
-- [ ] Razorpay SDK integration
-- [ ] `POST /api/payments/create-order` — Razorpay order
-- [ ] `POST /api/payments/verify` — verify signature, update plan
-- [ ] `POST /api/payments/webhook` — Razorpay webhook handler
-- [ ] `GET /api/payments/history` — user payment history
-
-#### Admin Module
-- [ ] `isAdmin` middleware
-- [ ] `GET /api/admin/stats` — overview metrics
-- [ ] `GET /api/admin/users` — paginated user list
-- [ ] `GET /api/admin/sessions` — all sessions
-- [ ] `GET /api/admin/payments` — payment history
-- [ ] `PATCH /api/admin/users/:id` — update user plan/role
-
----
-
-### Python AI Microservice Tasks (FastAPI)
-
-#### Setup
-- [ ] FastAPI project with `requirements.txt`
-- [ ] Configure Gemini API client
-- [ ] Configure edge-tts for TTS
-- [ ] Health check endpoint
-
-#### Resume Parser
-- [ ] `POST /parse-resume` — accept PDF bytes, extract text, call Gemini, return JSON
-- [ ] Prompt engineering for structured resume extraction
-- [ ] Handle multi-page PDFs
-
-#### Interview AI
-- [ ] `POST /generate-question` — given context (resume, JD, history), return next question
-- [ ] `POST /evaluate-answer` — score answer (0-10) + generate feedback
-- [ ] `POST /generate-tts` — text to audio bytes (edge-tts)
-- [ ] `POST /generate-feedback` — end-of-session overall feedback
-- [ ] Prompt engineering: system prompt templates
-
-#### Code Analyser
-- [ ] `POST /analyse-code` — code + question → correctness, complexity, suggestions
-- [ ] Support multiple languages (Python, Java, JavaScript, C++)
-
----
-
-### Frontend Tasks (React + Vite)
-
-#### Project Setup
-- [ ] Vite + React project, configure Tailwind + shadcn/ui
-- [ ] React Router setup (all routes)
-- [ ] Axios instance with base URL + interceptors
-- [ ] Zustand store setup (auth, interview state)
-- [ ] Socket.io client setup
-
-#### Auth Pages
-- [ ] `/register` — registration form + validation (Zod)
-- [ ] `/login` — login form
-- [ ] Auth guard HOC for protected routes
-- [ ] JWT storage in httpOnly cookie (or localStorage with care)
-
-#### Landing Page
-- [ ] Hero section with CTA
-- [ ] Features section
-- [ ] Pricing table (free/basic/pro)
-- [ ] Testimonials placeholder
-
-#### Dashboard
-- [ ] Past sessions list (cards with score + date)
-- [ ] Credits remaining indicator
-- [ ] Quick start button
-
-#### Setup Flow
-- [ ] Resume upload page (drag-and-drop, pdf only)
-- [ ] Job description input page
-- [ ] Interview type selector (behavioral/technical/coding/mixed)
-- [ ] Difficulty selector
-
-#### Interview Room (Core Feature)
-- [ ] Layout: Q&A panel + sidebar
-- [ ] AI question display component
-- [ ] Web Speech API hook (`useSpeechRecognition`)
-- [ ] Live transcription display
-- [ ] Audio player for TTS
-- [ ] Question counter / progress indicator
-- [ ] Controls: Skip, End Interview, Mute
-- [ ] Monaco Editor integration (for coding type)
-- [ ] "Submit Code" button + AI feedback display
-
-#### Feedback Page
-- [ ] Overall score visualization (circular progress)
-- [ ] Per-question score list
-- [ ] Strengths / weaknesses sections
-- [ ] Expandable Q&A review
-
-#### Payments
-- [ ] Pricing page
-- [ ] Razorpay checkout integration
-- [ ] Success / failure pages
-
-#### Admin Panel
-- [ ] Admin-only route guard
-- [ ] Stats overview cards
-- [ ] Users table with search/filter
-- [ ] Sessions table
-- [ ] Revenue chart (Recharts)
-
----
-
-### DevOps Tasks
-
-- [ ] GitHub repository setup, `.gitignore`
-- [ ] Environment variable files (`.env.example`)
-- [ ] Docker Compose for local dev (Postgres + Redis)
-- [ ] Deploy frontend to Vercel
-- [ ] Deploy Node backend to Render
-- [ ] Deploy Python service to Render / Railway
-- [ ] Set up Neon.tech free Postgres DB
-- [ ] Configure Upstash Redis
-- [ ] GitHub Actions CI (lint + test on PR)
-- [ ] Set up Sentry for error tracking
-
----
-
-## 12. Workflow Diagrams
-
-### Complete Interview Session Workflow
-
-```
-User lands on /interview/setup
-           ↓
-    Upload Resume (PDF)
-           ↓
-    Enter Job Description
-           ↓
-    Select: Type + Difficulty
-           ↓
-POST /api/interview/create
-  → DB: interview_sessions row created (status: pending)
-  → Python: pre-generate first question using resume context
-           ↓
-User enters /interview/:id
-  → Socket.io: client connects, joins session room
-  → status: active
-           ↓
-Socket emits → interview:question
-  → AI question text shown on screen
-  → TTS audio plays automatically
-           ↓
-User speaks answer (STT transcribing in real-time)
-           ↓
-User clicks "Next" or auto-detects silence
-  → Socket emits → interview:answer {text, questionId}
-  → Node → Python: evaluate_answer() → store score
-  → Python: generate_next_question()
-  → Python: generate_tts(next_question)
-  → Socket emits → interview:question (next)
-           ↓
-After 7 questions OR user clicks "End":
-  → Socket emits → interview:end
-  → Python: generate_feedback(all QAs)
-  → DB: update session status=completed, store feedback
-  → Redirect to /interview/:id/feedback
-```
-
-### Voice Pipeline Detail
-
-```
-SPEECH-TO-TEXT (Client-side, FREE):
-  Browser Mic → navigator.mediaDevices.getUserMedia()
-             → SpeechRecognition API
-             → onresult event → transcript text
-             → Socket.io emit → server
-
-TEXT-TO-SPEECH (Server-side, FREE):
-  Question text → Python edge-tts
-               → generates .mp3 bytes
-               → base64 encoded
-               → Socket.io emit → client
-               → new Audio(base64).play()
-```
-
-### Credit Deduction Flow
-
-```
-User starts interview
-       ↓
-Check user.credits > 0 ?
-       ↓ YES                    ↓ NO
-Deduct 1 credit           Show upgrade modal
-Create session              Redirect to /pricing
-Log credit_usage
-Continue interview
-```
-
----
-
-## Project Folder Structure
-
-```
-interview-ai/
-├── frontend/                   # React + Vite app
-│   ├── src/
-│   │   ├── components/         # Reusable UI components
-│   │   ├── pages/              # Route-level page components
-│   │   ├── hooks/              # Custom React hooks (useSpeech, etc.)
-│   │   ├── store/              # Zustand state stores
-│   │   ├── services/           # API call functions (axios)
-│   │   ├── socket/             # Socket.io client setup
-│   │   └── lib/                # Utils, constants, helpers
-│   └── package.json
-│
-├── backend/                    # Node.js + Express
-│   ├── prisma/
-│   │   └── schema.prisma       # DB schema definition
-│   ├── src/
-│   │   ├── routes/             # Express route handlers
-│   │   ├── controllers/        # Business logic
-│   │   ├── middleware/         # Auth, rate-limit, admin guards
-│   │   ├── services/           # DB queries (Prisma calls)
-│   │   ├── socket/             # Socket.io handlers
-│   │   └── utils/              # Helpers, validators
-│   └── package.json
-│
-├── ai-service/                 # Python FastAPI microservice
-│   ├── routers/                # FastAPI route handlers
-│   ├── services/               # AI logic (Gemini, TTS, parser)
-│   ├── prompts/                # Prompt templates
-│   ├── models/                 # Pydantic request/response models
-│   ├── main.py                 # FastAPI app entry
-│   └── requirements.txt
-│
-├── docker-compose.yml          # Local dev (Postgres + Redis)
-├── .env.example                # Template for environment vars
-└── README.md                   # This file
-```
-
----
-
-## Environment Variables Reference
-
-### Backend (.env)
-```
-DATABASE_URL=postgresql://user:pass@host:5432/interviewai
-JWT_SECRET=your_super_secret_key
-JWT_EXPIRES_IN=7d
-PYTHON_AI_URL=http://localhost:8000
-CLOUDINARY_URL=cloudinary://key:secret@cloud_name
-RAZORPAY_KEY_ID=rzp_test_xxxxx
-RAZORPAY_KEY_SECRET=your_secret
-REDIS_URL=redis://localhost:6379
-PORT=5000
-```
-
-### Python AI Service (.env)
-```
-GEMINI_API_KEY=your_gemini_key
-GROQ_API_KEY=your_groq_key
-PORT=8000
-```
-
-### Frontend (.env)
-```
-VITE_API_URL=http://localhost:5000
-VITE_SOCKET_URL=http://localhost:5000
-VITE_RAZORPAY_KEY=rzp_test_xxxxx
-```
-
----
-
-## Getting Started (Development)
-
-```bash
-# 1. Clone repo
-git clone https://github.com/yourusername/interview-ai
-
-# 2. Start local Postgres + Redis
-docker-compose up -d
-
-# 3. Setup backend
-cd backend
-npm install
-npx prisma migrate dev
-npm run dev
-
-# 4. Setup frontend
-cd ../frontend
-npm install
-npm run dev
-
-# 5. Setup Python AI service
-cd ../ai-service
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
----
-
-*Built with focus — Zero budget, maximum ambition.*
+## 11. Project Roadmap & Next Steps
+
+1. **Step 1: Database Migration** (`schema.prisma`):
+   - Add `isVoiceMode`, `voiceName`, `transcript` JSON, and `interviewMode` to `InterviewSession`.
+   - Run `bun db:migrate`.
+2. **Step 2: WebSocket Voice Engine Implementation**:
+   - Create `src/services/voice/gemini.live.ts` (Gemini Multimodal Live client).
+   - Create `src/websocket/interview.socket.ts` (Bun WebSocket handler).
+   - Mount WebSockets in `src/index.ts`.
+3. **Step 3: Post-Interview Analytics Report Card**:
+   - Build `GET /api/sessions/:id/results` endpoint for rich radar charts and recommendations.
+4. **Step 4: Payment Gateway Integration**:
+   - Wire up Razorpay / Stripe checkout and webhooks.
+5. **Step 5: Frontend Connection**:
+   - Connect React Vite frontend with Monaco Editor & Web Audio API.

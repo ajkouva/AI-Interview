@@ -46,6 +46,16 @@ const createSession = asyncHandler(async (req: Request, res: Response) => {
     res.status(201).json(session);
 });
 
+const getAllSessions = asyncHandler(async (req: Request, res: Response) => {
+    const clerkId = getClerkUserId(req);
+    if (!clerkId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const sessions = await sessionService.getAllSessions(clerkId);
+    res.status(200).json(sessions);
+});
+
 const getLatestSession = asyncHandler(async (req: Request, res: Response) => {
     const clerkId = getClerkUserId(req);
     if (!clerkId) {
@@ -75,8 +85,25 @@ const getSessionById = asyncHandler(async (req: Request, res: Response) => {
     res.status(200).json(session);
 });
 
+const submitSession = asyncHandler(async (req: Request, res: Response) => {
+    const clerkId = getClerkUserId(req);
+    if (!clerkId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { sessionId } = req.params;
+    if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({ error: "Session ID is required" });
+    }
+
+    const session = await sessionService.submitAndEvaluateSession(clerkId, sessionId);
+    res.status(200).json(session);
+});
+
 export default {
     createSession,
+    getAllSessions,
     getLatestSession,
-    getSessionById
+    getSessionById,
+    submitSession
 };

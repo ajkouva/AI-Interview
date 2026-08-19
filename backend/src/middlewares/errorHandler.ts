@@ -6,6 +6,12 @@ export const globalErrorHandler = (err: any, req: Request, res: Response, next: 
     let statusCode = err.statusCode || 500;
     let message = err.message || "Internal Server Error";
 
+    // Handle AI Timeout & Service Availability Errors
+    if (err.name === 'AITimeoutError' || err.code === 'AI_TIMEOUT_ERROR' || statusCode === 504) {
+        statusCode = 504;
+        message = err.message || "AI model service timed out. Please try again.";
+    }
+
     // Handle Multer file upload errors
     if (err.code === 'LIMIT_FILE_SIZE') {
         statusCode = 413;

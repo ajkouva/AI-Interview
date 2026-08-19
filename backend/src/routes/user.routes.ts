@@ -1,10 +1,10 @@
 import { Router } from "express";
 import authController from "../controllers/user.controller";
-import {requireAuth} from "@clerk/express";
+import { protectedRoute } from "../middlewares/auth";
 
 const userRouter = Router();
 
-userRouter.get('/me', requireAuth(), authController.me);
-userRouter.post('/onboarding', requireAuth(), authController.onboarding);
+userRouter.get('/me', protectedRoute, authController.me);
+userRouter.post('/onboarding', protectedRoute, authController.onboarding);
 
 export default userRouter;
