@@ -5,7 +5,7 @@ const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
-export const MODEL_NAME = "gemini-3.5-flash-lite";
+export const MODEL_NAME = "gemini-2.5-flash";
 export const GEMINI_TIMEOUT_MS = 15000; // 15 Seconds hard timeout limit
 
 export class AITimeoutError extends Error {
@@ -37,6 +37,7 @@ export async function generateStructuredAI<T>(
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
+                abortSignal: controller.signal
             }
         });
 
@@ -67,7 +68,7 @@ export async function generateStructuredAI<T>(
         return schema.parse(rawJson);
     } catch (error: any) {
         clearTimeout(timeoutId);
-        console.error(`[Gemini AI Error] Model: ${MODEL_NAME}`, error);
+        console.error(`[Gemini AI Error] Model: ${MODEL_NAME} | Error: ${error.name || 'Error'}: ${error.message}`);
 
         if (error instanceof AITimeoutError || error.name === "AbortError" || error.code === "ETIMEDOUT" || error.message?.includes("timed out")) {
             const timeoutError = new AITimeoutError("AI service timed out while processing your request. Please try again.");

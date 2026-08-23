@@ -25,6 +25,12 @@ async function me(userId: string) {
 
 async function onboarding(userId: string, data: OnboardingData) {
     try {
+        const existingUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } });
+        if (!existingUser) {
+            const error = new Error("Your account is still being synchronized. Please retry in a moment.") as any;
+            error.statusCode = 409;
+            throw error;
+        }
         const user = await prisma.user.update({
             where: {
                 clerkId: userId,
@@ -44,4 +50,4 @@ async function onboarding(userId: string, data: OnboardingData) {
 export default {
     me,
     onboarding,
-};
+};

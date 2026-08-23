@@ -121,6 +121,7 @@ model Question {
   session      InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+  @@unique([sessionId, questionNo])
   @@map("questions")
 }
 
@@ -188,6 +189,7 @@ enum Plan {
 
 enum SessionStatus {
   PENDING
+  EVALUATING
   ACTIVE
   COMPLETED
   ABANDONED

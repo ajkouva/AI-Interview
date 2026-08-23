@@ -44,6 +44,17 @@ const onboarding = asyncHandler(async (req: Request, res: Response) => {
     if (avatarUrl !== undefined && typeof avatarUrl !== 'string')
         return res.status(400).json({ error: 'Invalid avatarUrl' });
 
+    const textFields = { fullName, college, bio, targetRole, experienceLevel };
+    for (const [field, value] of Object.entries(textFields)) {
+        if (typeof value === 'string' && value.trim().length === 0) {
+            return res.status(400).json({ error: `${field} cannot be blank` });
+        }
+    }
+    if ((fullName?.length ?? 0) > 120 || (college?.length ?? 0) > 200 || (bio?.length ?? 0) > 2_000 ||
+        (targetRole?.length ?? 0) > 120 || (experienceLevel?.length ?? 60) > 60 || (avatarUrl?.length ?? 2_000) > 2_000) {
+        return res.status(400).json({ error: 'One or more profile fields exceed the allowed length' });
+    }
+
     const updatedUser = await userService.onboarding(userId, {
         fullName,
         college,

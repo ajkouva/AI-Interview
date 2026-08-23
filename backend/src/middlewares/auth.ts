@@ -2,9 +2,9 @@ import { getAuth } from '@clerk/express';
 import type { Request, Response, NextFunction } from 'express';
 
 export const getClerkUserId = (req: Request): string | null => {
-    // 1. Development Bypass Header for effortless Postman testing
+    // 1. Explicit local development bypass (disabled in production or if ALLOW_DEV_AUTH_BYPASS=false)
     const devUserId = req.headers['x-clerk-user-id'] as string;
-    if (process.env.NODE_ENV !== 'production' && devUserId) {
+    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_AUTH_BYPASS !== 'false' && devUserId) {
         return devUserId;
     }
     // 2. Standard Clerk Auth check

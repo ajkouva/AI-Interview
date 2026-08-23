@@ -61,23 +61,29 @@ export const handleClerkWebhook = async (req: Request, res: Response) => {
         }
 
         if (eventType === 'user.created' || eventType === 'user.updated') {
-            const { id, email_addresses, username, first_name, last_name, image_url, external_accounts } = evt.data;
-            const primaryEmail = email_addresses?.[0]?.email_address;
+            const { id, email_addresses, primary_email_address_id, username, first_name, last_name, image_url, external_accounts } = evt.data;
+            const primaryEmail = email_addresses?.find((email: { id: string }) => email.id === primary_email_address_id)?.email_address;
             const fullName = [first_name, last_name].filter(Boolean).join(' ') || null;
 
             const provider = external_accounts?.[0]?.provider || 'email';
+
+            if (!primaryEmail) {
+                console.error(`Clerk user ${id} has no primary email; sync skipped.`);
+                return res.status(422).json({ error: "Clerk user has no primary email address" });
+            }
 
             await prisma.user.upsert({
                 where: { clerkId: id },
                 update: {
                     email: primaryEmail,
-                    username: username || undefined,
+                    username: username || null,
+                    fullName,
                     avatarUrl: image_url,
                 },
                 create: {
                     clerkId: id,
-                    email: primaryEmail || `unknown-${id}@placeholder.com`, // Fallback for email
-                    username: username || undefined,
+                    email: primaryEmail,
+                    username: username || null,
                     fullName: fullName,
                     avatarUrl: image_url,
                     authProvider: provider,

@@ -14,7 +14,7 @@ async function createSession(
     clerkId: string,
     { resumeId, jobDescriptionId, sessionType = "MIXED", difficulty = "MEDIUM", durationMinutes = 15, noOfQuestions }: SessionDetailInput
 ) {
-    // 1. Fetch User & Guard initial credit state
+    // 1. Fetch User & atomically reserve a credit before any billable AI call.
     const user = await prisma.user.findUnique({
         where: { clerkId }
     });
@@ -22,12 +22,6 @@ async function createSession(
     if (!user) {
         const error = new Error("User not found in DB") as any;
         error.statusCode = 404;
-        throw error;
-    }
-
-    if (user.credits < 1) {
-        const error = new Error("Insufficient credits. Please upgrade your plan to start a new interview session.") as any;
-        error.statusCode = 402;
         throw error;
     }
 
@@ -46,18 +40,7 @@ async function createSession(
         throw error;
     }
 
-    // 3. Generate Questions using AI
-    const resumeContent = resume.content || resume.aiSummary || "Software Developer candidate";
-    const generatedQuestions = await generateQuestionWithAI(
-        resumeContent,
-        jobDescription.description,
-        difficulty,
-        noOfQuestions
-    );
-
-    // 4. Atomic Database Transaction: Deduct Credit (Conditional Guard against TOCTOU race), Log Usage & Create Session
-    const session = await prisma.$transaction(async (tx) => {
-        // A. Conditional Credit Deduction (protects against concurrent requests)
+    const creditLog = await prisma.$transaction(async (tx) => {
         const updateResult = await tx.user.updateMany({
             where: { id: user.id, credits: { gte: 1 } },
             data: { credits: { decrement: 1 } }
@@ -69,7 +52,19 @@ async function createSession(
             throw error;
         }
 
-        // B. Create Interview Session
+        return tx.creditUsageLog.create({
+            data: { userId: user.id, creditsUsed: 1, action: "CREATE_INTERVIEW_SESSION" }
+        });
+    });
+
+    let createdSessionId: string;
+    try {
+        const resumeContent = (resume.content || resume.aiSummary || "Software Developer candidate").slice(0, 30_000);
+        const generatedQuestions = await generateQuestionWithAI(
+            resumeContent, jobDescription.description, difficulty, noOfQuestions, sessionType
+        );
+
+        const session = await prisma.$transaction(async (tx) => {
         const newSession = await tx.interviewSession.create({
             data: {
                 userId: user.id,
@@ -83,15 +78,7 @@ async function createSession(
             }
         });
 
-        // C. Create Credit Usage Log
-        await tx.creditUsageLog.create({
-            data: {
-                userId: user.id,
-                sessionId: newSession.id,
-                creditsUsed: 1,
-                action: "CREATE_INTERVIEW_SESSION"
-            }
-        });
+        await tx.creditUsageLog.update({ where: { id: creditLog.id }, data: { sessionId: newSession.id } });
 
         // D. Create Generated Questions in Database
         await tx.question.createMany({
@@ -103,12 +90,20 @@ async function createSession(
             }))
         });
 
-        return newSession;
-    });
+            return newSession;
+        });
 
-    // 5. Return Complete Session with Questions
-    return await prisma.interviewSession.findUnique({
-        where: { id: session.id },
+        createdSessionId = session.id;
+    } catch (error) {
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({ where: { id: user.id }, data: { credits: { increment: 1 } } });
+            await tx.creditUsageLog.create({ data: { userId: user.id, creditsUsed: -1, action: "REFUND_FAILED_SESSION_CREATION" } });
+        });
+        throw error;
+    }
+
+    return prisma.interviewSession.findUnique({
+        where: { id: createdSessionId },
         include: {
             questions: { orderBy: { questionNo: "asc" } },
             jobDescription: { select: { title: true, description: true } },

@@ -34,10 +34,10 @@ export async function submitSingleAnswer({
             userId: user.id,
             status: "ACTIVE"
         },
-        include: {
-            jobDescription: {
-                select: { title: true, description: true }
-            }
+        select: {
+            id: true,
+            startedAt: true,
+            durationMinutes: true
         }
     });
 
@@ -47,13 +47,24 @@ export async function submitSingleAnswer({
         throw error;
     }
 
+    const now = new Date();
+    if (session.startedAt && now.getTime() >= session.startedAt.getTime() + session.durationMinutes * 60_000) {
+        await prisma.interviewSession.updateMany({
+            where: { id: session.id, status: "ACTIVE" },
+            data: { status: "ABANDONED", endedAt: now, durationSec: session.durationMinutes * 60 }
+        });
+        const error = new Error("This interview session has expired") as any;
+        error.statusCode = 410;
+        throw error;
+    }
+
     const question = await prisma.question.findFirst({
         where: {
             id: questionId,
             sessionId: session.id
         },
-        include: {
-            answer: true
+        select: {
+            id: true
         }
     });
 
@@ -63,16 +74,19 @@ export async function submitSingleAnswer({
         throw error;
     }
 
+    // Only update fields that the caller explicitly supplied to prevent wiping existing data
+    const updateData: any = {
+        answerAt: new Date()
+    };
+    if (answerText !== undefined) updateData.answerText = answerText || null;
+    if (codeSnippet !== undefined) updateData.codeSnippet = codeSnippet || null;
+    if (codeLanguage !== undefined) updateData.codeLanguage = codeLanguage || null;
+
     const savedAnswer = await prisma.answer.upsert({
         where: {
             questionId: question.id
         },
-        update: {
-            answerText: answerText || null,
-            codeSnippet: codeSnippet || null,
-            codeLanguage: codeLanguage || null,
-            answerAt: new Date()
-        },
+        update: updateData,
         create: {
             questionId: question.id,
             sessionId: session.id,
