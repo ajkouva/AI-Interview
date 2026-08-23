@@ -12,10 +12,36 @@ import sessionRouter from './routes/session.routes';
 import { globalErrorHandler } from './middlewares/errorHandler';
 import answerRouter from './routes/answer.routes';
 
+const requiredEnvironment = [
+  "DATABASE_URL",
+  "CLERK_PUBLISHABLE_KEY",
+  "CLERK_SECRET_KEY",
+  "CLERK_WEBHOOK_SECRET",
+  "GEMINI_API_KEY",
+  "IMAGEKIT_PUBLIC_KEY",
+  "IMAGEKIT_PRIVATE_KEY",
+  "IMAGEKIT_URL_ENDPOINT"
+];
+const missingEnvironment = requiredEnvironment.filter((name) => !process.env[name]);
+if (missingEnvironment.length > 0) {
+  throw new Error(`Missing required environment variables: ${missingEnvironment.join(", ")}`);
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+const configuredOrigins = (process.env.CORS_ORIGIN ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const developmentOrigins = ["http://localhost:3000", "http://localhost:5173"];
+const allowedOrigins = process.env.NODE_ENV === "production" ? configuredOrigins : [...developmentOrigins, ...configuredOrigins];
 
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error("Origin is not allowed by CORS policy"));
+  }
+}));
 // Mount webhooks before express.json() so we can capture the raw body for Svix
 app.use("/api/webhooks", webhookRouter);
 
@@ -40,6 +66,18 @@ app.get('/health', (req, res) => {
 // Global Error Handler (Must be last before app.listen)
 app.use(globalErrorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT} with Bun`);
 });
+
+async function shutdown(signal: string) {
+  console.log(`${signal} received; shutting down gracefully.`);
+  server.close(async () => {
+    const { prisma } = await import("./config/db");
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));

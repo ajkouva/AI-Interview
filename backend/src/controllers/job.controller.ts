@@ -12,7 +12,12 @@ const createJob = asyncHandler(async (req: Request, res: Response) => {
     if (!title || typeof title !== 'string' || !description || typeof description !== 'string') {
         return res.status(400).json({ error: "Invalid or missing title or description" });
     }
-    const job = await jobService.createJob(clerkId, { title, description });
+    const normalizedTitle = title.trim();
+    const normalizedDescription = description.trim();
+    if (!normalizedTitle || !normalizedDescription || normalizedTitle.length > 200 || normalizedDescription.length > 20_000) {
+        return res.status(400).json({ error: "title must be 1-200 characters and description must be 1-20,000 characters" });
+    }
+    const job = await jobService.createJob(clerkId, { title: normalizedTitle, description: normalizedDescription });
     res.status(201).json(job);
 });
 

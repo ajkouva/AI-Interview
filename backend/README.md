@@ -1,8 +1,8 @@
 # 🎯 AI-Powered Mock Interview Platform (Backend)
 
 A high-performance backend built with **Bun**, **Express**, **TypeScript**, **Prisma ORM**, **PostgreSQL**, and **Google Gemini AI**. This platform powers a **Dual-Engine AI Mock Interview System**:
-1. **📝 Practice Exam Mode:** Timed, card-by-card online technical assessment with integrated code runner and step-by-step scoring.
-2. **🎙️ Live Voice Simulation Mode:** Real-time conversational interview over WebSockets with Google Gemini Multimodal Live, featuring sub-500ms audio and live code review.
+1. **📝 Practice Exam Mode:** Backend support for generated questions, answer saving, and batch scoring.
+2. **🎙️ Live Voice Simulation Mode:** Planned; WebSockets, real-time audio, live code review, and a code runner are not implemented yet.
 
 ---
 
@@ -13,8 +13,7 @@ A high-performance backend built with **Bun**, **Express**, **TypeScript**, **Pr
 * **Database & ORM:** PostgreSQL 16 + Prisma ORM 7 (with B-Tree Indexing)
 * **Authentication:** Clerk Auth (`clerkMiddleware` + `getAuth`) & Svix Webhook Sync
 * **AI Models:** 
-  - `gemini-2.5-flash` for structured Zod JSON parsing & evaluation
-  - `gemini-2.0-flash-exp` for real-time Multimodal Live WebSockets
+  - `gemini-2.5-flash` for structured Zod JSON parsing & batch evaluation
 * **File Storage:** ImageKit Cloud Storage (with signed 5-min expiring URLs)
 * **PDF Parsing:** `pdf-parse` with `%PDF` magic-byte security guards
 
@@ -27,8 +26,8 @@ A high-performance backend built with **Bun**, **Express**, **TypeScript**, **Pr
 3. **🎯 Job Description Manager:** Save target job descriptions for tailored mock interview generation.
 4. **📄 AI PDF Resume Extractor:** Validates `%PDF` magic bytes, uploads to ImageKit private storage, and extracts candidate skills, experience, projects, and education into structured JSON.
 5. **🧠 Dual-Engine Interview Architecture:**
-   - **Mode 1 (Practice Exam):** Generates 5–20 tailored questions, accepts text/code submissions via `POST /api/sessions/:sessionId/answers`, delivers instant AI grading (0.0–10.0), and automatically aggregates scores on completion.
-   - **Mode 2 (Live Voice Call):** Bidirectional PCM audio streaming over WebSockets (`ws://localhost:3000/ws/interview/:sessionId`) with live speech, natural interruptions, and Monaco code synchronization.
+   - **Mode 1 (Practice Exam):** Generates 5–20 tailored questions, saves answers in real-time via `POST /api/answers`, and runs holistic batch AI evaluation upon submission via `POST /api/sessions/:sessionId/submit`.
+   - **Mode 2 (Live Voice Call):** Planned bidirectional PCM audio streaming over WebSockets with live speech, natural interruptions, and Monaco code synchronization.
 6. **🛡️ Enterprise Reliability:**
    - Atomic `$transaction` guards prevent credit-balance TOCTOU race conditions.
    - 15-second `AbortController` timeout protection on Gemini calls with custom 504 mapping.

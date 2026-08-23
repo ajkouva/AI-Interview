@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { protectedRoute } from "../middlewares/auth";
 import resumeController from "../controllers/resume.controller";
+import { rateLimit } from "../middlewares/rateLimit";
 
 const resumeRouter = Router();
 
@@ -20,7 +21,7 @@ const upload = multer({
     }
 });
 
-resumeRouter.post("/upload", protectedRoute, upload.single("file"), resumeController.uploadResume);
+resumeRouter.post("/upload", protectedRoute, rateLimit({ windowMs: 60_000, max: 5 }), upload.single("file"), resumeController.uploadResume);
 resumeRouter.get("/", protectedRoute, resumeController.getAllResumes);
 resumeRouter.get("/:id", protectedRoute, resumeController.getResumeById);
 resumeRouter.delete("/:id", protectedRoute, resumeController.deleteResume);

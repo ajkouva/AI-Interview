@@ -25,7 +25,10 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   let parser: PDFParse | null = null;
   try {
     parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
+    const result = await Promise.race([
+      parser.getText(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("PDF parsing timed out")), 15_000))
+    ]);
     return result.text;
   } catch (error) {
     console.error("PDF Parsing Error:", error);

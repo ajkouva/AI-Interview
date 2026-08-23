@@ -42,6 +42,9 @@ All protected routes require authentication. In production, pass the Clerk Sessi
 | **Sessions** | `/api/sessions` | `POST` | Deduct 1 credit, generate AI questions & start session |
 | **Sessions** | `/api/sessions/latest` | `GET` | Get candidate's most recent interview session |
 | **Sessions** | `/api/sessions/:id` | `GET` | Get specific session details and questions by ID |
+| **Sessions** | `/api/sessions/:sessionId/submit` | `POST` | Submit an active session for batch AI evaluation |
+| **Answers** | `/api/answers` | `POST` | Save an answer; include sessionId and questionId in the body |
+| **Answers** | `/api/answers/:sessionId/:questionId` | `POST` | Save an answer using URL parameters |
 
 ---
 
@@ -251,11 +254,11 @@ Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini A
 
 ## 5️⃣ Answer Submission & AI Evaluation (`/api/sessions/:sessionId/answers`)
 
-### 5.1 Submit Answer for Real-Time Evaluation (`POST /api/sessions/:sessionId/answers`)
-Submits a candidate's answer (text or code) for a specific question within a session. Invokes Gemini AI to grade the response, computes scoring metrics, creates the answer record, and automatically completes the interview session when all questions have been answered.
+### 5.1 Save an Answer (`POST /api/answers`)
+Saves a candidate's text or code answer for a question in an active session. AI evaluation runs only when the session is submitted with `POST /api/sessions/:sessionId/submit`.
 
 * **Auth Required:** `Yes`
-* **URL:** `POST /api/sessions/:sessionId/answers` (or `/api/answers` with `sessionId` in body)
+* **URL:** `POST /api/answers` with `sessionId` and `questionId` in the body, or `POST /api/answers/:sessionId/:questionId`.
 * **Request Body:**
 ```json
 {
@@ -265,21 +268,18 @@ Submits a candidate's answer (text or code) for a specific question within a ses
   "codeLanguage": "sql"
 }
 ```
-* **Response (201 Created):**
+* **Response (200 OK):**
 ```json
 {
-  "message": "Answer evaluated and submitted successfully",
+  "message": "Answer saved successfully",
   "data": {
     "answerId": "answer-uuid-1111",
     "questionId": "question-uuid-001",
     "sessionId": "session-uuid-7777",
-    "aiScore": 8.5,
-    "aiFeedback": "Clear explanation of indexing mechanics with correct SQL syntax.",
-    "keywordHit": ["B-Tree", "Table Scan", "Index Pointer"],
-    "suggestedAnswer": "A comprehensive answer should cover B-Tree structure, how PostgreSQL scans index pages before reading table heaps, and when composite indexes are preferred.",
-    "confidenceLevel": "HIGH",
-    "isCompleted": false,
-    "remainingQuestions": 4
+    "answerText": "Index scanning uses B-Trees in PostgreSQL to quickly locate row pointer offsets without reading full table pages.",
+    "codeSnippet": "CREATE INDEX idx_user_email ON users(email);",
+    "codeLanguage": "sql",
+    "savedAt": "2026-08-21T10:00:00.000Z"
   }
 }
 ```
