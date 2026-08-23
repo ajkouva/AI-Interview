@@ -45,6 +45,8 @@ All protected routes require authentication. In production, pass the Clerk Sessi
 | **Sessions** | `/api/sessions/:sessionId/submit` | `POST` | Submit an active session for batch AI evaluation |
 | **Answers** | `/api/answers` | `POST` | Save an answer; include sessionId and questionId in the body |
 | **Answers** | `/api/answers/:sessionId/:questionId` | `POST` | Save an answer using URL parameters |
+| **Live Voice** | `/ws/interview` | `WS` | Real-time bidirectional voice interview using Gemini Live |
+
 
 ---
 
@@ -252,16 +254,17 @@ Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini A
 
 ---
 
-## 5️⃣ Answer Submission & AI Evaluation (`/api/sessions/:sessionId/answers`)
+## 5️⃣ Answer Submission & AI Evaluation (`/api/answers`)
 
 ### 5.1 Save an Answer (`POST /api/answers`)
 Saves a candidate's text or code answer for a question in an active session. AI evaluation runs only when the session is submitted with `POST /api/sessions/:sessionId/submit`.
 
 * **Auth Required:** `Yes`
-* **URL:** `POST /api/answers` with `sessionId` and `questionId` in the body, or `POST /api/answers/:sessionId/:questionId`.
+* **URL:** `POST /api/answers` (or `POST /api/answers/:sessionId/:questionId`)
 * **Request Body:**
 ```json
 {
+  "sessionId": "session-uuid-7777",
   "questionId": "question-uuid-001",
   "answerText": "Index scanning uses B-Trees in PostgreSQL to quickly locate row pointer offsets without reading full table pages.",
   "codeSnippet": "CREATE INDEX idx_user_email ON users(email);",
@@ -283,6 +286,48 @@ Saves a candidate's text or code answer for a question in an active session. AI 
   }
 }
 ```
+
+---
+
+## 6️⃣ Live Voice Simulation WebSocket (`/ws/interview`)
+
+### 6.1 Connect to Live Interview
+Establishes a real-time bidirectional WebSocket stream with Google Gemini Multimodal Live API.
+
+* **Protocol:** `WebSocket (ws:// or wss://)`
+* **URL:** `/ws/interview?sessionId=<SESSION_UUID>&token=<CLERK_JWT>`
+* **Dev Bypass:** `/ws/interview?sessionId=<SESSION_UUID>&clerkId=<CLERK_USER_ID>` *(Only when `NODE_ENV !== 'production'`)*
+
+#### Inbound Messages (Client -> Server)
+* **Microphone PCM Audio:**
+```json
+{
+  "type": "AUDIO_CHUNK",
+  "data": "<base64_pcm_16000_mono_audio>"
+}
+```
+* **Text Turn:**
+```json
+{
+  "type": "TEXT",
+  "text": "Can you explain how concurrency works?"
+}
+```
+* **Live Monaco Code Update:**
+```json
+{
+  "type": "CODE_UPDATE",
+  "language": "typescript",
+  "code": "function twoSum(nums: number[], target: number) { ... }"
+}
+```
+
+#### Outbound Messages (Server -> Client)
+* **Status Ready:** `{"type": "STATUS", "message": "AI Live Session established"}`
+* **AI Audio Output (24kHz PCM):** `{"type": "AUDIO", "data": "<base64_audio>", "mimeType": "audio/pcm;rate=24000"}`
+* **Streaming Transcripts:** `{"type": "TRANSCRIPT", "speaker": "ai" | "user", "text": "Hello, welcome to..."}`
+* **Candidate Interruption:** `{"type": "INTERRUPTED"}` (Instructs client to instantly halt speaker audio)
+* **Error:** `{"type": "ERROR", "message": "..."}`
 
 ---
 

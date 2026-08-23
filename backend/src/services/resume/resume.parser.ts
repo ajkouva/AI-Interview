@@ -23,17 +23,25 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   }
 
   let parser: PDFParse | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     parser = new PDFParse({ data: buffer });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("PDF parsing timed out")), 15_000);
+    });
     const result = await Promise.race([
       parser.getText(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("PDF parsing timed out")), 15_000))
+      timeoutPromise
     ]);
     return result.text;
   } catch (error) {
     console.error("PDF Parsing Error:", error);
     throw new Error("Failed to extract text from PDF");
   } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
     if (parser) {
       try {
         await parser.destroy();

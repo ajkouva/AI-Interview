@@ -13,59 +13,68 @@ async function submitAndEvaluateSession(clerkId: string, sessionId: string) {
         throw error;
     }
 
-    // 2. Fetch Session with all Questions, Answers, Job Description & Resume
-    const session = await prisma.interviewSession.findFirst({
-        where: {
-            id: sessionId,
-            userId: user.id
-        },
-        include: {
-            jobDescription: true,
-            resume: true,
-            questions: {
-                orderBy: { questionNo: "asc" },
-                include: { answer: true }
-            }
-        }
+    // 2. Fetch basic session metadata to check ownership and expiration
+    const sessionMeta = await prisma.interviewSession.findFirst({
+        where: { id: sessionId, userId: user.id },
+        select: { id: true, status: true, startedAt: true, durationMinutes: true }
     });
 
-    if (!session) {
+    if (!sessionMeta) {
         const error = new Error("Interview session not found") as any;
         error.statusCode = 404;
         throw error;
     }
 
-    if (session.status !== "ACTIVE") {
-        const error = new Error(`This interview session cannot be submitted (current status: ${session.status})`) as any;
+    if (sessionMeta.status !== "ACTIVE") {
+        const error = new Error(`This interview session cannot be submitted (current status: ${sessionMeta.status})`) as any;
         error.statusCode = 400;
         throw error;
     }
 
     const now = new Date();
-    if (session.startedAt && now.getTime() >= session.startedAt.getTime() + session.durationMinutes * 60_000) {
+    if (sessionMeta.startedAt && now.getTime() >= sessionMeta.startedAt.getTime() + sessionMeta.durationMinutes * 60_000) {
         await prisma.interviewSession.updateMany({
-            where: { id: session.id, status: "ACTIVE" },
-            data: { status: "ABANDONED", endedAt: now, durationSec: session.durationMinutes * 60 }
+            where: { id: sessionMeta.id, status: "ACTIVE" },
+            data: { status: "ABANDONED", endedAt: now, durationSec: sessionMeta.durationMinutes * 60 }
         });
         const error = new Error("This interview session has expired") as any;
         error.statusCode = 410;
         throw error;
     }
 
-    // Claim the session before calling Gemini so concurrent submissions cannot
-    // create duplicate billable evaluations.
+    // 3. Atomically claim the session from ACTIVE to EVALUATING before reading answers
+    // to serialize answer saves with submission evaluation.
     const claim = await prisma.interviewSession.updateMany({
-        where: { id: session.id, status: "ACTIVE" },
+        where: { id: sessionMeta.id, status: "ACTIVE" },
         data: { status: "EVALUATING" }
     });
     if (claim.count === 0) {
-        const error = new Error("This interview session is already being submitted") as any;
+        const error = new Error("This interview session is already being submitted or is no longer active") as any;
         error.statusCode = 409;
         throw error;
     }
 
     try {
-    // 3. Prepare data for Batch AI Evaluation
+        // 4. NOW load the consistent snapshot of questions and candidate answers
+        const session = await prisma.interviewSession.findUnique({
+            where: { id: sessionId },
+            include: {
+                jobDescription: true,
+                resume: true,
+                questions: {
+                    orderBy: { questionNo: "asc" },
+                    include: { answer: true }
+                }
+            }
+        });
+
+        if (!session) {
+            const error = new Error("Interview session not found after claim") as any;
+            error.statusCode = 404;
+            throw error;
+        }
+
+        // 5. Prepare data for Batch AI Evaluation
     const validQuestionIdSet = new Set(session.questions.map((q) => q.id));
     const questionsForAI = session.questions.map((q) => ({
         questionId: q.id,
@@ -159,7 +168,7 @@ async function submitAndEvaluateSession(clerkId: string, sessionId: string) {
     } catch (error) {
         // A failed provider response must leave the interview answerable.
         await prisma.interviewSession.updateMany({
-            where: { id: session.id, status: "EVALUATING" },
+            where: { id: sessionId, status: "EVALUATING" },
             data: { status: "ACTIVE" }
         });
         throw error;
