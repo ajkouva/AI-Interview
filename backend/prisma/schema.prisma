@@ -84,6 +84,7 @@ model InterviewSession {
   userId           String
   resumeId         String?
   jobDescriptionId String?
+  mode             InterviewMode    @default(PRACTICE)   // <-- Distinguishes Practice vs Live
   status           SessionStatus    @default(PENDING)
   sessionType      SessionType      @default(MIXED)
   difficulty       Difficulty       @default(MEDIUM)
@@ -93,21 +94,25 @@ model InterviewSession {
   strengths        String[]         @default([])
   areasToImprove   String[]         @default([])
   competencyScores Json?
+  transcript       Json?                                 // <-- Stores conversational turns: [{ speaker, text, timestamp }]
   durationSec      Int?
   startedAt        DateTime?
   endedAt          DateTime?
   createdAt        DateTime         @default(now())
+  
   answers          Answer[]
   creditLogs       CreditUsageLog[]
-  jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id])
-  resume           Resume?          @relation(fields: [resumeId], references: [id])
+  jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
+  resume           Resume?          @relation(fields: [resumeId], references: [id], onDelete: SetNull)
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   questions        Question[]
-
   @@index([userId])
   @@index([status])
+  @@index([mode])
+  @@index([userId, mode])
   @@map("interview_sessions")
 }
+
 
 model Question {
   id           String           @id @default(uuid())
@@ -206,4 +211,9 @@ enum Difficulty {
   EASY
   MEDIUM
   HARD
+}
+
+enum InterviewMode {
+  PRACTICE
+  LIVE
 }

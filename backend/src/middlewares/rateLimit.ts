@@ -11,7 +11,18 @@ export function rateLimit({ windowMs, max }: { windowMs: number; max: number }) 
 
     return (req: Request, res: Response, next: NextFunction) => {
         const now = Date.now();
-        const key = `${req.ip}:${req.baseUrl}${req.path}`;
+        // Use static route path (e.g. /:sessionId/submit) instead of dynamic param values to prevent bypass and key bloat
+        const routePath = req.route?.path || req.path;
+        const identifier = (req.headers['x-clerk-user-id'] as string) || req.ip || "unknown";
+        const key = `${identifier}:${req.baseUrl}${routePath}`;
+
+        // Periodically evict expired entries if Map grows large to prevent unbounded memory growth
+        if (entries.size > 2000) {
+            for (const [k, v] of entries.entries()) {
+                if (v.resetAt <= now) entries.delete(k);
+            }
+        }
+
         const current = entries.get(key);
 
         if (!current || current.resetAt <= now) {

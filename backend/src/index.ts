@@ -11,6 +11,8 @@ import resumeRouter from './routes/resume.routes';
 import sessionRouter from './routes/session.routes';
 import { globalErrorHandler } from './middlewares/errorHandler';
 import answerRouter from './routes/answer.routes';
+import { setupInterviewWebSocket } from "./services/interview/interview.ws";
+
 
 const requiredEnvironment = [
   "DATABASE_URL",
@@ -69,6 +71,8 @@ app.use(globalErrorHandler);
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT} with Bun`);
 });
+
+setupInterviewWebSocket(server);
 
 async function shutdown(signal: string) {
   console.log(`${signal} received; shutting down gracefully.`);

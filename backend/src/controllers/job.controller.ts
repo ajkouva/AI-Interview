@@ -37,11 +37,6 @@ const getJobById = asyncHandler(async (req: Request, res: Response) => {
     }
     const jobId = req.params.id as string;
     const job = await jobService.getJobById(jobId, clerkId);
-
-    if (!job) {
-        return res.status(404).json({ error: "Job not found" });
-    }
-
     res.status(200).json(job);
 });
 

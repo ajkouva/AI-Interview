@@ -52,7 +52,10 @@ const getAllSessions = asyncHandler(async (req: Request, res: Response) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const sessions = await sessionService.getAllSessions(clerkId);
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    const sessions = await sessionService.getAllSessions(clerkId, page, limit);
     res.status(200).json(sessions);
 });
 

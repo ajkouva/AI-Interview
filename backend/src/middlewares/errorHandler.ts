@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 export const globalErrorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
     console.error(`[Global Error] at ${req.method} ${req.url}:`, err);
 
-    let statusCode = Number.isInteger(err.statusCode) ? err.statusCode : 500;
+    let statusCode = Number.isInteger(err.statusCode) && err.statusCode >= 400 && err.statusCode <= 599 ? err.statusCode: 500; 
     let message = err.message || "Internal Server Error";
 
     // Handle AI Timeout & Service Availability Errors

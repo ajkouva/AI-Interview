@@ -51,7 +51,7 @@ const onboarding = asyncHandler(async (req: Request, res: Response) => {
         }
     }
     if ((fullName?.length ?? 0) > 120 || (college?.length ?? 0) > 200 || (bio?.length ?? 0) > 2_000 ||
-        (targetRole?.length ?? 0) > 120 || (experienceLevel?.length ?? 60) > 60 || (avatarUrl?.length ?? 2_000) > 2_000) {
+        (targetRole?.length ?? 0) > 120 || (experienceLevel?.length ?? 0) > 60 || (avatarUrl?.length ?? 0) > 2_000) {
         return res.status(400).json({ error: 'One or more profile fields exceed the allowed length' });
     }
 

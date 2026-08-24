@@ -1,6 +1,6 @@
 import { prisma } from "../../../config/db";
 
-async function getAllSessions(clerkId: string) {
+async function getAllSessions(clerkId: string, page?: number, limit?: number) {
     const user = await prisma.user.findUnique({
         where: { clerkId }
     });
@@ -11,9 +11,14 @@ async function getAllSessions(clerkId: string) {
         throw error;
     }
 
+    const take = limit && Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : undefined;
+    const skip = page && Number.isFinite(page) && page > 1 && take ? (page - 1) * take : undefined;
+
     return await prisma.interviewSession.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: "desc" },
+        take,
+        skip,
         include: {
             jobDescription: {
                 select: {

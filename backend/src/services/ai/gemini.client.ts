@@ -5,7 +5,7 @@ const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
-export const MODEL_NAME = "gemini-2.5-flash";
+export const MODEL_NAME = process.env.TEXT_MODEL || "gemini-3.5-flash-lite";
 export const GEMINI_TIMEOUT_MS = 15000; // 15 Seconds hard timeout limit
 
 export class AITimeoutError extends Error {

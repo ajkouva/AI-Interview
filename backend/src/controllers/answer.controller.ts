@@ -41,25 +41,29 @@ const submitSingleAnswer = asyncHandler(async (req: Request, res: Response) => {
         throw error;
     }
 
+    const trimmedAnswerText = typeof answerText === "string" ? answerText.trim() : undefined;
+    const trimmedCodeSnippet = typeof codeSnippet === "string" ? codeSnippet.trim() : undefined;
+    const trimmedCodeLanguage = typeof codeLanguage === "string" ? codeLanguage.trim() : undefined;
+
     // Enforce reasonable length limits to protect prompt token budgets
-    if (answerText && answerText.length > 10000) {
+    if (trimmedAnswerText && trimmedAnswerText.length > 10000) {
         const error = new Error("answerText exceeds maximum allowed length of 10,000 characters") as any;
         error.statusCode = 400;
         throw error;
     }
-    if (codeSnippet && codeSnippet.length > 20000) {
+    if (trimmedCodeSnippet && trimmedCodeSnippet.length > 20000) {
         const error = new Error("codeSnippet exceeds maximum allowed length of 20,000 characters") as any;
         error.statusCode = 400;
         throw error;
     }
-    if (codeLanguage && codeLanguage.length > 50) {
+    if (trimmedCodeLanguage && trimmedCodeLanguage.length > 50) {
         const error = new Error("codeLanguage exceeds maximum allowed length of 50 characters") as any;
         error.statusCode = 400;
         throw error;
     }
 
-    if (!answerText && !codeSnippet) {
-        const error = new Error("Please provide either answerText or codeSnippet") as any;
+    if (!trimmedAnswerText && !trimmedCodeSnippet) {
+        const error = new Error("Please provide valid, non-empty answerText or codeSnippet") as any;
         error.statusCode = 400;
         throw error;
     }
@@ -68,9 +72,9 @@ const submitSingleAnswer = asyncHandler(async (req: Request, res: Response) => {
         clerkId,
         sessionId,
         questionId,
-        answerText,
-        codeSnippet,
-        codeLanguage
+        answerText: trimmedAnswerText,
+        codeSnippet: trimmedCodeSnippet,
+        codeLanguage: trimmedCodeLanguage
     });
 
     res.status(200).json({
