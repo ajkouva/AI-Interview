@@ -118,9 +118,20 @@ export async function createLiveInterviewSession(clerkId: string, data: {
             throw error;
         }
 
-        // Auto-select latest resume if not explicitly passed
-        let targetResumeId = data.resumeId;
-        if (!targetResumeId) {
+        // Scope and validate resume ownership
+        let targetResumeId: string | undefined = undefined;
+        if (data.resumeId) {
+            const ownedResume = await tx.resume.findFirst({
+                where: { id: data.resumeId, userId: user.id },
+                select: { id: true },
+            });
+            if (!ownedResume) {
+                const error = new Error("Resume not found or does not belong to user") as any;
+                error.statusCode = 404;
+                throw error;
+            }
+            targetResumeId = ownedResume.id;
+        } else {
             const latestResume = await tx.resume.findFirst({
                 where: { userId: user.id },
                 orderBy: { createdAt: "desc" },
@@ -129,9 +140,20 @@ export async function createLiveInterviewSession(clerkId: string, data: {
             targetResumeId = latestResume?.id;
         }
 
-        // Auto-select latest job description if not explicitly passed
-        let targetJobId = data.jobDescriptionId;
-        if (!targetJobId) {
+        // Scope and validate job description ownership
+        let targetJobId: string | undefined = undefined;
+        if (data.jobDescriptionId) {
+            const ownedJob = await tx.jobDescription.findFirst({
+                where: { id: data.jobDescriptionId, userId: user.id },
+                select: { id: true },
+            });
+            if (!ownedJob) {
+                const error = new Error("Job description not found or does not belong to user") as any;
+                error.statusCode = 404;
+                throw error;
+            }
+            targetJobId = ownedJob.id;
+        } else {
             const latestJob = await tx.jobDescription.findFirst({
                 where: { userId: user.id },
                 orderBy: { createdAt: "desc" },
@@ -171,10 +193,45 @@ export async function createLiveInterviewSession(clerkId: string, data: {
     });
 }
 
+export async function refundLiveSessionCredit(sessionId: string): Promise<void> {
+    try {
+        await prisma.$transaction(async (tx) => {
+            const session = await tx.interviewSession.findUnique({
+                where: { id: sessionId },
+                select: { id: true, userId: true, status: true },
+            });
+            if (!session || session.status !== "PENDING") {
+                return;
+            }
+
+            await tx.interviewSession.update({
+                where: { id: session.id },
+                data: { status: "ABANDONED" },
+            });
+
+            await tx.user.update({
+                where: { id: session.userId },
+                data: { credits: { increment: 1 } },
+            });
+
+            await tx.creditUsageLog.create({
+                data: {
+                    userId: session.userId,
+                    sessionId: session.id,
+                    creditsUsed: -1,
+                    action: "LIVE_INTERVIEW_REFUND",
+                },
+            });
+        });
+    } catch (err) {
+        console.error(`[Credit Refund Error] Failed to refund session ${sessionId}:`, err);
+    }
+}
 
 export default {
     getLiveSessionContext,
     markLiveSessionActive,
     completeLiveSession,
-    createLiveInterviewSession
+    createLiveInterviewSession,
+    refundLiveSessionCredit
 };

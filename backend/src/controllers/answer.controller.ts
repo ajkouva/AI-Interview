@@ -42,7 +42,7 @@ const submitSingleAnswer = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const trimmedAnswerText = typeof answerText === "string" ? answerText.trim() : undefined;
-    const trimmedCodeSnippet = typeof codeSnippet === "string" ? codeSnippet.trim() : undefined;
+    const finalCodeSnippet = typeof codeSnippet === "string" ? codeSnippet : undefined;
     const trimmedCodeLanguage = typeof codeLanguage === "string" ? codeLanguage.trim() : undefined;
 
     // Enforce reasonable length limits to protect prompt token budgets
@@ -51,7 +51,7 @@ const submitSingleAnswer = asyncHandler(async (req: Request, res: Response) => {
         error.statusCode = 400;
         throw error;
     }
-    if (trimmedCodeSnippet && trimmedCodeSnippet.length > 20000) {
+    if (finalCodeSnippet && finalCodeSnippet.length > 20000) {
         const error = new Error("codeSnippet exceeds maximum allowed length of 20,000 characters") as any;
         error.statusCode = 400;
         throw error;
@@ -62,7 +62,10 @@ const submitSingleAnswer = asyncHandler(async (req: Request, res: Response) => {
         throw error;
     }
 
-    if (!trimmedAnswerText && !trimmedCodeSnippet) {
+    const hasValidAnswer = Boolean(trimmedAnswerText && trimmedAnswerText.length > 0);
+    const hasValidCode = Boolean(finalCodeSnippet && finalCodeSnippet.trim().length > 0);
+
+    if (!hasValidAnswer && !hasValidCode) {
         const error = new Error("Please provide valid, non-empty answerText or codeSnippet") as any;
         error.statusCode = 400;
         throw error;
@@ -73,7 +76,7 @@ const submitSingleAnswer = asyncHandler(async (req: Request, res: Response) => {
         sessionId,
         questionId,
         answerText: trimmedAnswerText,
-        codeSnippet: trimmedCodeSnippet,
+        codeSnippet: hasValidCode ? finalCodeSnippet : undefined,
         codeLanguage: trimmedCodeLanguage
     });
 

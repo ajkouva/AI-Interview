@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { getClerkUserId } from "./auth";
 
 type RateLimitEntry = { count: number; resetAt: number };
 
@@ -13,7 +14,7 @@ export function rateLimit({ windowMs, max }: { windowMs: number; max: number }) 
         const now = Date.now();
         // Use static route path (e.g. /:sessionId/submit) instead of dynamic param values to prevent bypass and key bloat
         const routePath = req.route?.path || req.path;
-        const identifier = (req.headers['x-clerk-user-id'] as string) || req.ip || "unknown";
+        const identifier = getClerkUserId(req) || req.ip || "unknown";
         const key = `${identifier}:${req.baseUrl}${routePath}`;
 
         // Periodically evict expired entries if Map grows large to prevent unbounded memory growth
