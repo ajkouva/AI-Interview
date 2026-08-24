@@ -16,6 +16,7 @@ export class GeminiLiveService {
     private transcriptHistory: LiveTranscriptTurn[] = [];
     private isSyncingTranscript: boolean = false;
     private pendingTranscriptSync: boolean = false;
+    private wrapUpTimer: ReturnType<typeof setTimeout> | null = null;
     public onConclude?: () => void;
 
     constructor(clientWs: WebSocket, context: LiveInterviewContext) {
@@ -152,7 +153,9 @@ export class GeminiLiveService {
     }
 
     private handleGeminiMessage(message: any) {
-        console.log("[Gemini Live Msg]:", JSON.stringify(message).substring(0, 300));
+        if (process.env.DEBUG_AI === "true") {
+            console.log("[Gemini Live Msg]:", JSON.stringify(message).substring(0, 300));
+        }
 
         // 1. Audio chunks from AI Turn (24kHz PCM base64)
         if (message.serverContent?.modelTurn?.parts) {
@@ -214,8 +217,8 @@ export class GeminiLiveService {
                 text: chunk,
             });
 
-            // When candidate finishes speaking their turn, commit the complete sentence to transcript
-            if (message.serverContent.inputTranscription.finished) {
+            // Commit user speech turn to transcript
+            if (message.serverContent.inputTranscription.finished || this.currentUserTurnText.length > 200) {
                 if (this.currentUserTurnText.trim()) {
                     this.recordTurn("user", this.currentUserTurnText);
                     this.currentUserTurnText = "";
@@ -243,12 +246,15 @@ export class GeminiLiveService {
                 aiSpokenText.includes("concludes our interview") ||
                 aiSpokenText.includes("that wraps up our session") ||
                 aiSpokenText.includes("that concludes our session") ||
+                aiSpokenText.includes("interview_concluded") ||
                 (aiSpokenText.includes("best of luck") && aiSpokenText.includes("goodbye"));
 
             if (isConcluding) {
                 console.log(`🏁 [Gemini Live] AI naturally concluded the interview for session: ${this.context.sessionId}`);
+                if (this.wrapUpTimer) clearTimeout(this.wrapUpTimer);
                 // Give 3.5 seconds for the 24kHz audio buffer to finish playing in candidate's browser
-                setTimeout(() => {
+                this.wrapUpTimer = setTimeout(() => {
+                    this.wrapUpTimer = null;
                     if (this.onConclude) {
                         this.onConclude();
                     } else {
@@ -282,12 +288,21 @@ export class GeminiLiveService {
      */
     public sendAudioChunk(base64Audio: string) {
         if (this.geminiSession && this.isConnected) {
-            this.geminiSession.sendRealtimeInput([
-                {
-                    mimeType: "audio/pcm;rate=16000",
-                    data: base64Audio,
-                },
-            ]);
+            try {
+                this.geminiSession.sendRealtimeInput({
+                    media: {
+                        mimeType: "audio/pcm;rate=16000",
+                        data: base64Audio,
+                    },
+                });
+            } catch {
+                this.geminiSession.sendRealtimeInput([
+                    {
+                        mimeType: "audio/pcm;rate=16000",
+                        data: base64Audio,
+                    },
+                ]);
+            }
         }
     }
     /**
@@ -311,6 +326,10 @@ export class GeminiLiveService {
      * Gracefully closes the Gemini live session
      */
     public close() {
+        if (this.wrapUpTimer) {
+            clearTimeout(this.wrapUpTimer);
+            this.wrapUpTimer = null;
+        }
         if (this.geminiSession) {
             try {
                 this.geminiSession.close();

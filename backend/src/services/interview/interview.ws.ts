@@ -5,15 +5,51 @@ import interviewService from "./interview.services";
 import { GeminiLiveService } from "./gemini.live.services";
 import type { ClientMessage } from "./interview.types";
 
-export function setupInterviewWebSocket(server: Server) {
+interface ExtWebSocket extends WebSocket {
+    isAlive: boolean;
+}
+
+export function setupInterviewWebSocket(server: Server): WebSocketServer {
     const wss = new WebSocketServer({ server, path: "/ws/interview" });
 
+    // 30-Second Ping/Pong Heartbeat to terminate dead / half-open TCP connections
+    const heartbeatInterval = setInterval(() => {
+        wss.clients.forEach((ws) => {
+            const extWs = ws as ExtWebSocket;
+            if (extWs.isAlive === false) {
+                console.log("💀 [WebSocket] Terminating dead client connection (missed heartbeat pong)");
+                return extWs.terminate();
+            }
+            extWs.isAlive = false;
+            extWs.ping();
+        });
+    }, 30_000);
+
+    wss.on("close", () => {
+        clearInterval(heartbeatInterval);
+    });
+
     wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
+        const extWs = ws as ExtWebSocket;
+        extWs.isAlive = true;
+
+        extWs.on("pong", () => {
+            extWs.isAlive = true;
+        });
+
         console.log("⚡ [WebSocket] Client attempting connection to /ws/interview");
 
         const url = new URL(req.url || "", `http://${req.headers.host}`);
         const sessionId = url.searchParams.get("sessionId");
-        const token = url.searchParams.get("token");
+        
+        // Extract token from query param or Sec-WebSocket-Protocol header
+        let token = url.searchParams.get("token");
+        const protocolHeader = req.headers["sec-websocket-protocol"];
+        if (!token && protocolHeader) {
+            const raw = Array.isArray(protocolHeader) ? protocolHeader[0] : protocolHeader;
+            token = raw ? raw.split(",")[0]?.trim() || null : null;
+        }
+
         const devClerkUserId =
             url.searchParams.get("clerkId") ||
             (req.headers["x-clerk-user-id"] as string);
@@ -25,7 +61,7 @@ export function setupInterviewWebSocket(server: Server) {
 
         let clerkId: string | null = null;
 
-        // 1. Local Development Bypass (Postman / local testing)
+        // 1. Strict Local Development Bypass
         if (
             process.env.NODE_ENV !== "production" &&
             process.env.ALLOW_DEV_AUTH_BYPASS !== "false" &&
@@ -42,12 +78,14 @@ export function setupInterviewWebSocket(server: Server) {
                 clerkId = verified.sub;
             } catch (err: any) {
                 console.error("[WebSocket Auth Error] Invalid token:", err.message);
+                await interviewService.refundLiveSessionCredit(sessionId);
                 ws.close(1008, "Invalid or expired Clerk authentication token");
                 return;
             }
         }
 
         if (!clerkId) {
+            await interviewService.refundLiveSessionCredit(sessionId);
             ws.close(1008, "Unauthorized: Authentication credentials missing");
             return;
         }
@@ -57,6 +95,7 @@ export function setupInterviewWebSocket(server: Server) {
             context = await interviewService.getLiveSessionContext(sessionId, clerkId);
         } catch (error: any) {
             console.error(`[WebSocket Setup Error]: ${error.message}`);
+            await interviewService.refundLiveSessionCredit(sessionId);
             ws.close(1008, error.message || "Failed to load session context");
             return;
         }
@@ -95,6 +134,7 @@ export function setupInterviewWebSocket(server: Server) {
             clearSessionTimers();
             console.error("[WebSocket] Failed to start Gemini live session:", error);
             geminiLive.close();
+            await interviewService.refundLiveSessionCredit(sessionId);
             ws.close(1011, "Failed to start AI live session");
             return;
         }
@@ -158,7 +198,7 @@ export function setupInterviewWebSocket(server: Server) {
                         }
                         break;
 
-                    case "END":
+                    case "END": {
                         clearSessionTimers();
                         console.log(`⏹️ [WebSocket] Candidate requested to end live session: ${sessionId}`);
                         const endTranscript = geminiLive.getTranscript();
@@ -171,6 +211,7 @@ export function setupInterviewWebSocket(server: Server) {
                         ws.send(JSON.stringify({ type: "END" }));
                         ws.close(1000, "Interview completed by candidate");
                         break;
+                    }
 
                     default:
                         // If JSON was sent without 'type', but contains text/prompt
@@ -206,4 +247,5 @@ export function setupInterviewWebSocket(server: Server) {
         });
     });
     console.log("🚀 [WebSocket] Live Interview Server initialized on path /ws/interview");
+    return wss;
 }

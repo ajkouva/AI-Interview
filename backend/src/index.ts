@@ -72,11 +72,30 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT} with Bun`);
 });
 
-setupInterviewWebSocket(server);
+const wss = setupInterviewWebSocket(server);
 
 async function shutdown(signal: string) {
   console.log(`${signal} received; shutting down gracefully.`);
+
+  // 5-second force exit timer
+  const forceExitTimer = setTimeout(() => {
+    console.error("Forced shutdown after timeout.");
+    process.exit(1);
+  }, 5000);
+  forceExitTimer.unref();
+
+  // Terminate active WebSockets and close WebSocket Server
+  try {
+    for (const client of wss.clients) {
+      client.terminate();
+    }
+    wss.close();
+  } catch (err) {
+    console.error("Error closing WebSocket server:", err);
+  }
+
   server.close(async () => {
+    clearTimeout(forceExitTimer);
     const { prisma } = await import("./config/db");
     await prisma.$disconnect();
     process.exit(0);
