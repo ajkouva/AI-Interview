@@ -189,10 +189,10 @@ Deletes the file from ImageKit cloud storage and removes the record from Postgre
 
 ---
 
-## 4️⃣ Interview Session Engine (`/api/sessions`)
+## 4️⃣ Dynamic Practice Interview Session Engine (`/api/sessions`)
 
-### 4.1 Create & Start Interview Session (`POST /api/sessions`)
-Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini AI to generate customized questions matching the candidate's resume and target job, and saves questions to the database.
+### 4.1 Create & Start Dynamic Session (`POST /api/sessions`)
+Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini AI to craft a personalized warm greeting + **Question #1** tailored to candidate's resume and target job, synthesizes neural voice audio using **Edge-TTS**, and saves Question 1 to PostgreSQL.
 
 * **Auth Required:** `Yes`
 * **Request Body:**
@@ -203,52 +203,95 @@ Deducts 1 credit from user, creates an active `InterviewSession`, calls Gemini A
   "sessionType": "TECHNICAL",
   "difficulty": "MEDIUM",
   "durationMinutes": 15,
-  "noOfQuestions": 5
+  "totalQuestions": 5,
+  "voice": "en-US-GuyNeural"
 }
 ```
 * **Response (201 Created):**
 ```json
 {
-  "id": "session-uuid-7777",
-  "userId": "user-uuid-1234",
-  "resumeId": "resume-uuid-9999",
-  "jobDescriptionId": "job-uuid-5678",
-  "status": "ACTIVE",
-  "sessionType": "TECHNICAL",
-  "difficulty": "MEDIUM",
-  "durationMinutes": 15,
-  "startedAt": "2026-08-14T15:00:00.000Z",
-  "questions": [
-    {
-      "id": "question-uuid-001",
-      "sessionId": "session-uuid-7777",
-      "questionNo": 1,
-      "questionText": "Can you explain how connection pooling works in PostgreSQL?",
-      "questionType": "TECHNICAL"
+  "session": {
+    "id": "session-uuid-7777",
+    "userId": "user-uuid-1234",
+    "status": "ACTIVE",
+    "totalQuestions": 5,
+    "currentQuestionNo": 1,
+    "jobDescription": {
+      "title": "Senior Backend Developer",
+      "description": "..."
     },
-    {
-      "id": "question-uuid-002",
-      "sessionId": "session-uuid-7777",
-      "questionNo": 2,
-      "questionText": "Describe how you optimize slow database queries using indexes.",
-      "questionType": "TECHNICAL"
+    "resume": {
+      "title": "Resume.pdf"
     }
-  ],
-  "jobDescription": {
-    "title": "Senior Backend Developer - Node.js",
-    "description": "We are seeking a Backend Developer..."
   },
-  "resume": {
-    "title": "Aman Singh - Software Engineer"
+  "greeting": "Hello Aman, welcome to your Senior Backend Developer interview.",
+  "currentQuestion": {
+    "id": "question-uuid-001",
+    "questionNo": 1,
+    "questionText": "To start off, could you walk me through the distributed caching system mentioned on your resume?",
+    "questionType": "TECHNICAL",
+    "audioBase64": "//uQxAA..."
+  },
+  "totalQuestions": 5
+}
+```
+
+---
+
+### 4.2 Submit Answer Turn & Get Instant Evaluation + Next Question (`POST /api/sessions/:sessionId/turn`)
+Submits candidate's answer (spoken/transcribed text + optional Monaco code editor snippet) for Question $N$. 
+- Gemini evaluates the answer immediately (score 0–100, constructive review, code feedback).
+- If the answer was vague/shallow, Gemini crafts an adaptive **follow-up probe** (`isFollowUp: true`).
+- If questions remain, crafts **Question $N+1$** and synthesizes audio with Edge-TTS.
+- If the final question is reached, automatically computes the overall competency scorecard and completes the session.
+
+* **Auth Required:** `Yes`
+* **Request Body:**
+```json
+{
+  "questionId": "question-uuid-001",
+  "answerText": "I used Redis write-through caching to reduce database read latency by 80%...",
+  "codeSnippet": "function getCache(key: string) { ... }",
+  "codeLanguage": "typescript",
+  "voice": "en-US-GuyNeural"
+}
+```
+* **Response (200 OK):**
+```json
+{
+  "message": "Turn evaluated successfully",
+  "data": {
+    "evaluation": {
+      "score": 88,
+      "feedback": "Strong explanation of the cache invalidation strategy. Excellent consideration of cache stampede.",
+      "strengths": ["Clear architecture communication", "Proper TTL selection"],
+      "improvements": ["Mention Redis cluster replication failover"],
+      "codeReview": "Clean typescript syntax and proper error handling."
+    },
+    "nextQuestion": {
+      "id": "question-uuid-002",
+      "questionNo": 2,
+      "questionText": "How would you handle database concurrency when two workers update the same balance?",
+      "questionType": "TECHNICAL",
+      "isFollowUp": false,
+      "audioBase64": "//uQxAA..."
+    },
+    "isCompleted": false,
+    "progress": {
+      "current": 1,
+      "total": 5
+    }
   }
 }
 ```
 
-### 4.2 Get Candidate's Latest Session (`GET /api/sessions/latest`)
+---
+
+### 4.3 Get Candidate's Latest Session (`GET /api/sessions/latest`)
 * **Auth Required:** `Yes`
 * **Response (200 OK):** Candidate's most recent `InterviewSession` object with questions included.
 
-### 4.3 Get Session Details By ID (`GET /api/sessions/:id`)
+### 4.4 Get Session Details By ID (`GET /api/sessions/:id`)
 * **Auth Required:** `Yes`
 * **Response (200 OK):** Specific `InterviewSession` object with questions included.
 

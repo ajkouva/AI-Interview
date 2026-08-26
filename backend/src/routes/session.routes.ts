@@ -11,7 +11,7 @@ sessionRouter.get("/", protectedRoute, sessionController.getAllSessions);
 sessionRouter.get("/latest", protectedRoute, sessionController.getLatestSession);
 sessionRouter.get("/:id", protectedRoute, sessionController.getSessionById);
 
-sessionRouter.post("/:sessionId/submit", protectedRoute, rateLimit({ windowMs: 60_000, max: 5 }), sessionController.submitSession);
+sessionRouter.post("/:sessionId/turn", protectedRoute, rateLimit({ windowMs: 60_000, max: 20 }), sessionController.submitTurn);
 
 sessionRouter.post("/live", protectedRoute, rateLimit({ windowMs: 60_000, max: 5 }), liveController.createLiveSession);
 

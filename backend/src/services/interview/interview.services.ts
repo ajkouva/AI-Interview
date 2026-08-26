@@ -193,39 +193,49 @@ export async function createLiveInterviewSession(clerkId: string, data: {
     });
 }
 
-export async function refundLiveSessionCredit(sessionId: string): Promise<void> {
-    try {
-        await prisma.$transaction(async (tx) => {
-            const session = await tx.interviewSession.findUnique({
-                where: { id: sessionId },
-                select: { id: true, userId: true, status: true },
-            });
-            if (!session || session.status !== "PENDING") {
-                return;
-            }
-
-            await tx.interviewSession.update({
-                where: { id: session.id },
-                data: { status: "ABANDONED" },
-            });
-
-            await tx.user.update({
-                where: { id: session.userId },
-                data: { credits: { increment: 1 } },
-            });
-
-            await tx.creditUsageLog.create({
-                data: {
-                    userId: session.userId,
-                    sessionId: session.id,
-                    creditsUsed: -1,
-                    action: "LIVE_INTERVIEW_REFUND",
-                },
-            });
+export async function refundLiveSessionCredit(sessionId: string, clerkId: string): Promise<boolean> {
+    return await prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({
+            where: { clerkId },
+            select: { id: true },
         });
-    } catch (err) {
-        console.error(`[Credit Refund Error] Failed to refund session ${sessionId}:`, err);
-    }
+        if (!user) {
+            return false;
+        }
+
+        // Atomically transition from PENDING to ABANDONED for this verified owner only
+        const sessionUpdate = await tx.interviewSession.updateMany({
+            where: {
+                id: sessionId,
+                userId: user.id,
+                status: "PENDING",
+            },
+            data: { status: "ABANDONED" },
+        });
+
+        if (sessionUpdate.count !== 1) {
+            // Already claimed, active, completed, or not owned by user
+            return false;
+        }
+
+        // Refund 1 credit
+        await tx.user.update({
+            where: { id: user.id },
+            data: { credits: { increment: 1 } },
+        });
+
+        // Log refund
+        await tx.creditUsageLog.create({
+            data: {
+                userId: user.id,
+                sessionId: sessionId,
+                creditsUsed: -1,
+                action: "LIVE_INTERVIEW_REFUND",
+            },
+        });
+
+        return true;
+    });
 }
 
 export default {
