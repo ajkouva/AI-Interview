@@ -36,28 +36,38 @@ async function createSession(
         throw error;
     }
 
-    // 2. Fetch Optional Resume & Job Description Context
+    // 2. Fetch & Verify Optional Resume & Job Description Context
     let resumeContent = "General Software Engineering candidate";
     let jobTitle = "Software Engineer";
     let jobDescriptionContent = "General software development requirements.";
+    let verifiedResumeId: string | null = null;
+    let verifiedJobId: string | null = null;
 
     if (resumeId) {
         const resume = await prisma.resume.findFirst({
             where: { id: resumeId, userId: user.id }
         });
-        if (resume) {
-            resumeContent = resume.content || resume.aiSummary || resumeContent;
+        if (!resume) {
+            const error = new Error("Resume not found or unauthorized") as any;
+            error.statusCode = 404;
+            throw error;
         }
+        verifiedResumeId = resume.id;
+        resumeContent = resume.content || resume.aiSummary || resumeContent;
     }
 
     if (jobDescriptionId) {
         const job = await prisma.jobDescription.findFirst({
             where: { id: jobDescriptionId, userId: user.id }
         });
-        if (job) {
-            jobTitle = job.title || jobTitle;
-            jobDescriptionContent = job.description || jobDescriptionContent;
+        if (!job) {
+            const error = new Error("Job description not found or unauthorized") as any;
+            error.statusCode = 404;
+            throw error;
         }
+        verifiedJobId = job.id;
+        jobTitle = job.title || jobTitle;
+        jobDescriptionContent = job.description || jobDescriptionContent;
     }
 
     // 3. Atomically reserve 1 credit
@@ -78,7 +88,7 @@ async function createSession(
         });
     });
 
-    const sanitizedTotalQuestions = typeof totalQuestions === "number" && totalQuestions > 0 ? Math.min(totalQuestions, 20) : 5;
+    const sanitizedTotalQuestions = typeof totalQuestions === "number" && Number.isInteger(totalQuestions) && totalQuestions > 0 ? Math.min(totalQuestions, 20) : 5;
 
     let createdSessionId: string;
     let greetingText: string;
@@ -107,8 +117,8 @@ async function createSession(
             const newSession = await tx.interviewSession.create({
                 data: {
                     userId: user.id,
-                    resumeId: resumeId || null,
-                    jobDescriptionId: jobDescriptionId || null,
+                    resumeId: verifiedResumeId,
+                    jobDescriptionId: verifiedJobId,
                     mode: "PRACTICE",
                     status: "ACTIVE",
                     sessionType: (sessionType as SessionType) || "MIXED",

@@ -42,7 +42,7 @@ All protected routes require authentication. In production, pass the Clerk Sessi
 | **Sessions** | `/api/sessions` | `POST` | Deduct 1 credit, generate AI questions & start session |
 | **Sessions** | `/api/sessions/latest` | `GET` | Get candidate's most recent interview session |
 | **Sessions** | `/api/sessions/:id` | `GET` | Get specific session details and questions by ID |
-| **Sessions** | `/api/sessions/:sessionId/submit` | `POST` | Submit an active session for batch AI evaluation |
+| **Sessions** | `/api/sessions/:sessionId/turn` | `POST` | Submit candidate turn (voice/text/code) for instant evaluation & next question |
 | **Answers** | `/api/answers` | `POST` | Save an answer; include sessionId and questionId in the body |
 | **Answers** | `/api/answers/:sessionId/:questionId` | `POST` | Save an answer using URL parameters |
 | **Live Voice** | `/ws/interview` | `WS` | Real-time bidirectional voice interview using Gemini Live |
@@ -300,7 +300,7 @@ Submits candidate's answer (spoken/transcribed text + optional Monaco code edito
 ## 5️⃣ Answer Submission & AI Evaluation (`/api/answers`)
 
 ### 5.1 Save an Answer (`POST /api/answers`)
-Saves a candidate's text or code answer for a question in an active session. AI evaluation runs only when the session is submitted with `POST /api/sessions/:sessionId/submit`.
+Saves a candidate's text or code answer for a question in an active session. In the dynamic practice interview mode, answers and per-turn evaluations are handled interactively via `POST /api/sessions/:sessionId/turn`.
 
 * **Auth Required:** `Yes`
 * **URL:** `POST /api/answers` (or `POST /api/answers/:sessionId/:questionId`)

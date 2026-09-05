@@ -32,8 +32,8 @@ const createSession = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const questionCount = totalQuestions ?? noOfQuestions;
-    if (questionCount !== undefined && (typeof questionCount !== 'number' || questionCount < 1 || questionCount > 20)) {
-        return res.status(400).json({ error: "totalQuestions must be a number between 1 and 20" });
+    if (questionCount !== undefined && (typeof questionCount !== 'number' || !Number.isInteger(questionCount) || questionCount < 1 || questionCount > 20)) {
+        return res.status(400).json({ error: "totalQuestions must be an integer between 1 and 20" });
     }
 
     const session = await sessionService.createSession(clerkId, {
@@ -63,6 +63,18 @@ const submitTurn = asyncHandler(async (req: Request, res: Response) => {
     }
     if (!questionId || typeof questionId !== 'string') {
         return res.status(400).json({ error: "questionId is required" });
+    }
+    if (answerText !== undefined && typeof answerText !== 'string') {
+        return res.status(400).json({ error: "answerText must be a string" });
+    }
+    if (codeSnippet !== undefined && typeof codeSnippet !== 'string') {
+        return res.status(400).json({ error: "codeSnippet must be a string" });
+    }
+    if (codeLanguage !== undefined && typeof codeLanguage !== 'string') {
+        return res.status(400).json({ error: "codeLanguage must be a string" });
+    }
+    if (voice !== undefined && typeof voice !== 'string') {
+        return res.status(400).json({ error: "voice must be a string" });
     }
 
     const result = await sessionService.submitTurn({
