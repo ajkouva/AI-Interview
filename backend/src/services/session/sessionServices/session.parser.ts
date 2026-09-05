@@ -161,7 +161,36 @@ export async function evaluateTurnAndGenerateNextWithAI({
     Return ONLY a valid JSON object matching the requested schema.
     `;
 
-    return await generateStructuredAI(prompt, TurnEvaluationSchema);
+    const result = await generateStructuredAI(prompt, TurnEvaluationSchema);
+
+    // Enforce progression invariants based on stored session progress
+    if (!isLastQuestion) {
+        // Non-final turn: must have next question and cannot complete early
+        result.finalSummary = undefined;
+        if (!result.nextStep.nextQuestionText || result.nextStep.nextQuestionText.trim() === "") {
+            result.nextStep.nextQuestionText = `Can you expand further on your technical approach and how you would test it in production?`;
+        }
+    } else {
+        // Final turn: cannot have follow-up questions; must conclude
+        result.nextStep.isFollowUp = false;
+        result.nextStep.nextQuestionText = undefined;
+        if (!result.finalSummary) {
+            result.finalSummary = {
+                overallScore: result.evaluation.score,
+                overallFeedback: result.nextStep.concludingRemarks || result.evaluation.feedback,
+                strengths: result.evaluation.strengths,
+                areasToImprove: result.evaluation.improvements,
+                competencyScores: {
+                    problemSolving: result.evaluation.score,
+                    technicalKnowledge: result.evaluation.score,
+                    communication: 80,
+                    codeQuality: result.evaluation.score
+                }
+            };
+        }
+    }
+
+    return result;
 }
 
 export default {

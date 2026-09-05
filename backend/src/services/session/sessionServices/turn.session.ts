@@ -52,13 +52,13 @@ export async function submitTurn({
         throw error;
     }
 
-    if (session.status === "COMPLETED") {
-        const error = new Error("This interview session has already been completed.") as any;
+    if (session.status !== "ACTIVE") {
+        const error = new Error(`Interview session is not active (status: ${session.status}).`) as any;
         error.statusCode = 400;
         throw error;
     }
 
-    // 3. Find target question
+    // 3. Find target question and validate it is the current active unanswered turn
     const currentQuestion = session.questions.find((q) => q.id === questionId);
     if (!currentQuestion) {
         const error = new Error("Question not found in this interview session.") as any;
@@ -66,7 +66,19 @@ export async function submitTurn({
         throw error;
     }
 
-    // 4. Save Candidate Answer (or update existing)
+    if (currentQuestion.questionNo !== session.currentQuestionNo) {
+        const error = new Error(`Cannot submit answer for question #${currentQuestion.questionNo}. Active turn is question #${session.currentQuestionNo}.`) as any;
+        error.statusCode = 400;
+        throw error;
+    }
+
+    if (currentQuestion.answer && currentQuestion.answer.aiScore !== null) {
+        const error = new Error(`Question #${currentQuestion.questionNo} has already been evaluated.`) as any;
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // 4. Validate Candidate Answer
     const sanitizedAnswerText = answerText?.trim() || null;
     const sanitizedCode = codeSnippet && codeSnippet.trim().length > 0 ? codeSnippet : null;
 
@@ -76,7 +88,48 @@ export async function submitTurn({
         throw error;
     }
 
-    // 5. Build History of Previous Turns for AI Context
+    // 5. Atomically Claim the Turn before the slow AI call
+    const claimSuccess = await prisma.$transaction(async (tx) => {
+        const active = await tx.interviewSession.findUnique({
+            where: { id: session.id },
+            select: { status: true, currentQuestionNo: true }
+        });
+        if (!active || active.status !== "ACTIVE" || active.currentQuestionNo !== currentQuestion.questionNo) {
+            return false;
+        }
+        const existingAns = await tx.answer.findUnique({
+            where: { questionId: currentQuestion.id }
+        });
+        if (existingAns && existingAns.aiScore !== null) {
+            return false;
+        }
+        await tx.answer.upsert({
+            where: { questionId: currentQuestion.id },
+            create: {
+                questionId: currentQuestion.id,
+                sessionId: session.id,
+                answerText: sanitizedAnswerText,
+                codeSnippet: sanitizedCode,
+                codeLanguage: codeLanguage || null,
+                answerAt: new Date()
+            },
+            update: {
+                answerText: sanitizedAnswerText,
+                codeSnippet: sanitizedCode,
+                codeLanguage: codeLanguage || null,
+                answerAt: new Date()
+            }
+        });
+        return true;
+    });
+
+    if (!claimSuccess) {
+        const error = new Error(`Question #${currentQuestion.questionNo} is currently being processed or already evaluated.`) as any;
+        error.statusCode = 409;
+        throw error;
+    }
+
+    // 6. Build History of Previous Turns for AI Context
     const history = session.questions
         .filter((q) => q.questionNo < currentQuestion.questionNo)
         .map((q) => ({
@@ -89,9 +142,9 @@ export async function submitTurn({
 
     const resumeText = session.resume?.content || session.resume?.aiSummary || "Software Engineer";
     const jobText = session.jobDescription?.description || session.jobDescription?.title || "Software Engineering role";
-    const targetRole = session.jobDescription?.title || user.targetRole ||  "Software Engineer";
+    const targetRole = session.jobDescription?.title || user.targetRole || "Software Engineer";
 
-    // 6. Evaluate Turn & Determine Next Step via Gemini
+    // 7. Evaluate Turn & Determine Next Step via Gemini
     const turnResult = await evaluateTurnAndGenerateNextWithAI({
         candidateName: user.fullName || "Candidate",
         targetRole,
@@ -109,42 +162,32 @@ export async function submitTurn({
         history
     });
 
-    const isConcluded = currentQuestion.questionNo >= session.totalQuestions && !turnResult.nextStep.isFollowUp;
+    // 8. Derive completion strictly from stored session progress
+    const isConcluded = currentQuestion.questionNo >= session.totalQuestions;
 
     let nextQuestionData: any = null;
     let nextAudioBase64: string = "";
+    let finalSummaryData: any = null;
 
-    // 7. Atomic DB Transaction: Save Answer Evaluation + (Create Next Question OR Mark Completed)
+    // 9. Atomic DB Transaction: Save Answer Evaluation + (Create Next Question OR Mark Completed)
     await prisma.$transaction(async (tx) => {
-        // Upsert Answer
-        await tx.answer.upsert({
+        // Update Answer with evaluation scores
+        await tx.answer.update({
             where: { questionId: currentQuestion.id },
-            create: {
-                questionId: currentQuestion.id,
-                sessionId: session.id,
-                answerText: sanitizedAnswerText,
-                codeSnippet: sanitizedCode,
-                codeLanguage: codeLanguage || null,
-                aiScore: turnResult.evaluation.score,
-                aiFeedback: turnResult.evaluation.feedback
-            },
-            update: {
-                answerText: sanitizedAnswerText,
-                codeSnippet: sanitizedCode,
-                codeLanguage: codeLanguage || null,
+            data: {
                 aiScore: turnResult.evaluation.score,
                 aiFeedback: turnResult.evaluation.feedback
             }
         });
 
-        if (isConcluded || turnResult.finalSummary) {
+        if (isConcluded) {
             // Compute aggregate scores
             const allScores = [...history.map((h) => h.score).filter((s): s is number => typeof s === "number"), turnResult.evaluation.score];
             const computedAvgScore = allScores.length > 0
                 ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
                 : turnResult.evaluation.score;
 
-            const finalSummary = turnResult.finalSummary || {
+            finalSummaryData = turnResult.finalSummary || {
                 overallScore: computedAvgScore,
                 overallFeedback: turnResult.nextStep.concludingRemarks || "Interview session successfully completed.",
                 strengths: turnResult.evaluation.strengths,
@@ -162,23 +205,24 @@ export async function submitTurn({
                 data: {
                     status: "COMPLETED",
                     endedAt: new Date(),
-                    totalScore: finalSummary.overallScore,
-                    aiFeedback: finalSummary.overallFeedback,
-                    strengths: finalSummary.strengths,
-                    areasToImprove: finalSummary.areasToImprove,
-                    competencyScores: finalSummary.competencyScores
+                    totalScore: finalSummaryData.overallScore,
+                    aiFeedback: finalSummaryData.overallFeedback,
+                    strengths: finalSummaryData.strengths,
+                    areasToImprove: finalSummaryData.areasToImprove,
+                    competencyScores: finalSummaryData.competencyScores
                 }
             });
-        } else if (turnResult.nextStep.nextQuestionText) {
-            // Create Question N+1
+        } else {
+            // Non-final question: Create Question N+1
             const nextQuestionNo = currentQuestion.questionNo + 1;
+            const nextText = turnResult.nextStep.nextQuestionText || "Can you expand further on your technical approach and system design considerations?";
             const newQ = await tx.question.create({
                 data: {
                     sessionId: session.id,
                     questionNo: nextQuestionNo,
-                    questionText: turnResult.nextStep.nextQuestionText,
+                    questionText: nextText,
                     questionType: (turnResult.nextStep.nextQuestionType as SessionType) || currentQuestion.questionType,
-                    isFollowUp: turnResult.nextStep.isFollowUp,
+                    isFollowUp: turnResult.nextStep.isFollowUp ?? false,
                     parentQId: turnResult.nextStep.isFollowUp ? currentQuestion.id : null,
                     aiVoiceId: voice
                 }
@@ -193,9 +237,9 @@ export async function submitTurn({
         }
     });
 
-    // 8. Synthesize Next Question Audio with Edge-TTS if session continues
-    if (nextQuestionData && turnResult.nextStep.nextQuestionText) {
-        nextAudioBase64 = await synthesizeSpeechBase64(turnResult.nextStep.nextQuestionText, voice);
+    // 10. Synthesize Next Question Audio with Edge-TTS if session continues
+    if (!isConcluded && nextQuestionData) {
+        nextAudioBase64 = await synthesizeSpeechBase64(nextQuestionData.questionText, voice);
     }
 
     return {
@@ -209,8 +253,8 @@ export async function submitTurn({
             audioBase64: nextAudioBase64
         } : null,
         isCompleted: isConcluded,
-        concludingRemarks: turnResult.nextStep.concludingRemarks || null,
-        finalSummary: turnResult.finalSummary || null,
+        concludingRemarks: isConcluded ? (turnResult.nextStep.concludingRemarks || "Interview session successfully completed.") : null,
+        finalSummary: isConcluded ? finalSummaryData : null,
         progress: {
             current: currentQuestion.questionNo,
             total: session.totalQuestions
