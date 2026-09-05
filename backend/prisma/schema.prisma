@@ -84,19 +84,21 @@ model InterviewSession {
   userId           String
   resumeId         String?
   jobDescriptionId String?
-  mode             InterviewMode    @default(PRACTICE)   // <-- Distinguishes Practice vs Live
-  status           SessionStatus    @default(PENDING)
+  mode             InterviewMode    @default(PRACTICE)
+  status           SessionStatus    @default(ACTIVE)
   sessionType      SessionType      @default(MIXED)
   difficulty       Difficulty       @default(MEDIUM)
   durationMinutes  Int              @default(15)
+  totalQuestions   Int              @default(5)           // 5 or 10 questions chosen by candidate
+  currentQuestionNo Int             @default(1)
   totalScore       Float?
   aiFeedback       String?
   strengths        String[]         @default([])
   areasToImprove   String[]         @default([])
   competencyScores Json?
-  transcript       Json?                                 // <-- Stores conversational turns: [{ speaker, text, timestamp }]
+  transcript       Json?
   durationSec      Int?
-  startedAt        DateTime?
+  startedAt        DateTime?        @default(now())
   endedAt          DateTime?
   createdAt        DateTime         @default(now())
   
@@ -113,13 +115,14 @@ model InterviewSession {
   @@map("interview_sessions")
 }
 
-
 model Question {
   id           String           @id @default(uuid())
   sessionId    String
   questionNo   Int
   questionText String
   questionType SessionType
+  isFollowUp   Boolean          @default(false)       // Indicates if this is an adaptive probe
+  parentQId    String?                                // Links to the question being probed
   aiVoiceId    String?
   askedAt      DateTime         @default(now())
   answer       Answer?
@@ -129,6 +132,7 @@ model Question {
   @@unique([sessionId, questionNo])
   @@map("questions")
 }
+
 
 model Answer {
   id              String           @id @default(uuid())

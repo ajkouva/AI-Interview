@@ -11,7 +11,7 @@ import resumeRouter from './routes/resume.routes';
 import sessionRouter from './routes/session.routes';
 import { globalErrorHandler } from './middlewares/errorHandler';
 import answerRouter from './routes/answer.routes';
-import { setupInterviewWebSocket } from "./services/interview/interview.ws";
+import { setupInterviewWebSocket, awaitAllInterviewFinalizations } from "./services/interview/interview.ws";
 
 
 const requiredEnvironment = [
@@ -77,28 +77,39 @@ const wss = setupInterviewWebSocket(server);
 async function shutdown(signal: string) {
   console.log(`${signal} received; shutting down gracefully.`);
 
-  // 5-second force exit timer
+  // 5-second force exit timer covering the entire shutdown pipeline
   const forceExitTimer = setTimeout(() => {
     console.error("Forced shutdown after timeout.");
     process.exit(1);
   }, 5000);
   forceExitTimer.unref();
 
-  // Terminate active WebSockets and close WebSocket Server
+  // 1. Terminate active WebSockets and close WebSocket Server
   try {
     for (const client of wss.clients) {
       client.terminate();
     }
-    wss.close();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
   } catch (err) {
     console.error("Error closing WebSocket server:", err);
   }
 
+  // 2. Stop accepting new HTTP requests
   server.close(async () => {
-    clearTimeout(forceExitTimer);
-    const { prisma } = await import("./config/db");
-    await prisma.$disconnect();
-    process.exit(0);
+    try {
+      // 3. Await all in-flight session finalization and DB transcript writes
+      await awaitAllInterviewFinalizations();
+
+      // 4. Gracefully disconnect Prisma Client
+      const { prisma } = await import("./config/db");
+      await prisma.$disconnect();
+
+      clearTimeout(forceExitTimer);
+      process.exit(0);
+    } catch (err) {
+      console.error("Error during final shutdown tasks:", err);
+      process.exit(1);
+    }
   });
 }
 

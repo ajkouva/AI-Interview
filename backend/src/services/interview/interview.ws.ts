@@ -9,6 +9,27 @@ interface ExtWebSocket extends WebSocket {
     isAlive: boolean;
 }
 
+const activeFinalizations = new Set<Promise<void>>();
+
+export async function awaitAllInterviewFinalizations(): Promise<void> {
+    if (activeFinalizations.size > 0) {
+        console.log(`⏳ [WebSocket] Awaiting ${activeFinalizations.size} active session finalization(s)...`);
+        await Promise.allSettled(Array.from(activeFinalizations));
+    }
+}
+
+function safeCompleteSession(sessionId: string, transcript?: any[]): Promise<void> {
+    const promise = interviewService.completeLiveSession(sessionId, transcript)
+        .catch((err) => {
+            console.error(`[WebSocket] Error completing live session ${sessionId}:`, err);
+        })
+        .finally(() => {
+            activeFinalizations.delete(promise);
+        });
+    activeFinalizations.add(promise);
+    return promise;
+}
+
 export function setupInterviewWebSocket(server: Server): WebSocketServer {
     const wss = new WebSocketServer({ server, path: "/ws/interview" });
 
@@ -78,14 +99,12 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
                 clerkId = verified.sub;
             } catch (err: any) {
                 console.error("[WebSocket Auth Error] Invalid token:", err.message);
-                await interviewService.refundLiveSessionCredit(sessionId);
                 ws.close(1008, "Invalid or expired Clerk authentication token");
                 return;
             }
         }
 
         if (!clerkId) {
-            await interviewService.refundLiveSessionCredit(sessionId);
             ws.close(1008, "Unauthorized: Authentication credentials missing");
             return;
         }
@@ -95,7 +114,6 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
             context = await interviewService.getLiveSessionContext(sessionId, clerkId);
         } catch (error: any) {
             console.error(`[WebSocket Setup Error]: ${error.message}`);
-            await interviewService.refundLiveSessionCredit(sessionId);
             ws.close(1008, error.message || "Failed to load session context");
             return;
         }
@@ -116,11 +134,7 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
             console.log(`🏁 [WebSocket] AI concluded interview for session: ${sessionId}`);
             const transcript = geminiLive.getTranscript();
             geminiLive.close();
-            try {
-                await interviewService.completeLiveSession(sessionId, transcript);
-            } catch (e) {
-                console.error("[WebSocket] Error completing live session on conclude:", e);
-            }
+            await safeCompleteSession(sessionId, transcript);
             if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({ type: "END" }));
                 ws.close(1000, "Interview concluded by interviewer");
@@ -134,7 +148,8 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
             clearSessionTimers();
             console.error("[WebSocket] Failed to start Gemini live session:", error);
             geminiLive.close();
-            await interviewService.refundLiveSessionCredit(sessionId);
+            // Securely refund owner only after context ownership was verified
+            await interviewService.refundLiveSessionCredit(sessionId, clerkId);
             ws.close(1011, "Failed to start AI live session");
             return;
         }
@@ -153,11 +168,7 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
             console.log(`⏰ [WebSocket] Session ${sessionId} reached 15-minute limit. Auto-completing session.`);
             const transcript = geminiLive.getTranscript();
             geminiLive.close();
-            try {
-                await interviewService.completeLiveSession(sessionId, transcript);
-            } catch (err) {
-                console.error("[WebSocket] Error completing session on timeout:", err);
-            }
+            await safeCompleteSession(sessionId, transcript);
             if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({ type: "END" }));
                 ws.close(1000, "Maximum interview duration reached");
@@ -203,11 +214,7 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
                         console.log(`⏹️ [WebSocket] Candidate requested to end live session: ${sessionId}`);
                         const endTranscript = geminiLive.getTranscript();
                         geminiLive.close();
-                        try {
-                            await interviewService.completeLiveSession(sessionId, endTranscript);
-                        } catch (e) {
-                            console.error("[WebSocket] Error completing live session:", e);
-                        }
+                        await safeCompleteSession(sessionId, endTranscript);
                         ws.send(JSON.stringify({ type: "END" }));
                         ws.close(1000, "Interview completed by candidate");
                         break;
@@ -233,11 +240,7 @@ export function setupInterviewWebSocket(server: Server): WebSocketServer {
             console.log(`🔌 [WebSocket] Client disconnected from interview session: ${sessionId}`);
             const transcript = geminiLive.getTranscript();
             geminiLive.close();
-            try {
-                await interviewService.completeLiveSession(sessionId, transcript);
-            } catch (err) {
-                console.error("[WebSocket] Error completing session on close:", err);
-            }
+            await safeCompleteSession(sessionId, transcript);
         });
 
         ws.on("error", (err) => {

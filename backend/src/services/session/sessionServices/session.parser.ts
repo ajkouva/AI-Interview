@@ -1,80 +1,170 @@
 import { z } from "zod";
 import { generateStructuredAI } from "../../ai/gemini.client";
 
-const QuestionSchema = z.object({
-    questionNo: z.number().int().positive(),
+export const FirstQuestionSchema = z.object({
+    greeting: z.string().min(1),
     questionText: z.string().min(1),
     questionType: z.enum(["BEHAVIORAL", "CODING", "TECHNICAL", "MIXED"]),
 });
 
-export async function generateQuestionWithAI(
-    resumeText: string,
-    jobDescriptionText: string,
-    difficultyLevel: string = "MEDIUM",
-    NoOfQuestions: number = 5,
-    sessionType: string = "MIXED"
-) {
-    // 1. Enforce integer count bounds (1 to 20) with robust finite number check
-    const sanitizedCount = typeof NoOfQuestions === "number" && Number.isFinite(NoOfQuestions) ? Math.floor(NoOfQuestions) : 5;
-    const targetCount = Math.min(Math.max(sanitizedCount, 1), 20);
+export const TurnEvaluationSchema = z.object({
+    evaluation: z.object({
+        score: z.number().min(0).max(100),
+        feedback: z.string().min(1),
+        strengths: z.array(z.string()).default([]),
+        improvements: z.array(z.string()).default([]),
+        codeReview: z.string().optional()
+    }),
+    nextStep: z.object({
+        isFollowUp: z.boolean(),
+        nextQuestionText: z.string().optional(),
+        nextQuestionType: z.enum(["BEHAVIORAL", "CODING", "TECHNICAL", "MIXED"]).optional(),
+        concludingRemarks: z.string().optional()
+    }),
+    finalSummary: z.object({
+        overallScore: z.number().min(0).max(100),
+        overallFeedback: z.string(),
+        strengths: z.array(z.string()),
+        areasToImprove: z.array(z.string()),
+        competencyScores: z.object({
+            problemSolving: z.number().min(0).max(100),
+            technicalKnowledge: z.number().min(0).max(100),
+            communication: z.number().min(0).max(100),
+            codeQuality: z.number().min(0).max(100)
+        })
+    }).optional()
+});
 
-    // 2. Build dynamic Zod schema requiring exact question count array length
-    const DynamicQuestionsSchema = z.array(QuestionSchema).length(
-        targetCount,
-        `AI generated question count mismatch. Expected exactly ${targetCount} questions.`
-    );
-
+export async function generateFirstQuestionWithAI({
+    candidateName,
+    targetRole,
+    resumeText,
+    jobDescriptionText,
+    difficultyLevel = "MEDIUM",
+    sessionType = "MIXED"
+}: {
+    candidateName: string;
+    targetRole: string;
+    resumeText: string;
+    jobDescriptionText: string;
+    difficultyLevel?: string;
+    sessionType?: string;
+}) {
     const resumeContext = resumeText.slice(0, 30_000);
     const jobContext = jobDescriptionText.slice(0, 20_000);
-    const prompt = `
-    Generate a list of EXACTLY ${targetCount} interview questions based on the provided resume and job description.
-    The questions should be relevant to the candidate's experience and the requirements of the job.
-    The requested interview type is ${sessionType}; make the questions match it. For MIXED, use an intentional mix.
-    You MUST return exactly ${targetCount} items in the array.
-    
-    Resume Context:
-    <untrusted_resume>
-    ${resumeContext}
-    </untrusted_resume>
-    
-    Job Description Context:
-    <untrusted_job_description>
-    ${jobContext}
-    </untrusted_job_description>
 
-    Difficulty Level: ${difficultyLevel}
-    
-    Return the questions STRICTLY in the following JSON array format with no markdown wrappers:
-    [
-        {
-            "questionNo": 1,
-            "questionText": "Question text here...",
-            "questionType": "BEHAVIORAL"
-        },
-        {
-            "questionNo": 2,
-            "questionText": "Question text here...",
-            "questionType": "TECHNICAL"
-        }
-    ]
+    const prompt = `
+    You are an expert technical interviewer conducting an interactive interview for the role of "${targetRole}".
+    Candidate Name: "${candidateName}"
+    Difficulty: ${difficultyLevel}
+    Session Focus: ${sessionType}
+
+    Candidate Resume:
+    <resume>
+    ${resumeContext || "General background in software development."}
+    </resume>
+
+    Target Job Description:
+    <job_description>
+    ${jobContext || "Standard industry standards for this role."}
+    </job_description>
+
+    TASK:
+    1. Generate a warm, professional, 1-to-2 sentence opening greeting addressed to ${candidateName}.
+    2. Generate Question #1: An introductory/icebreaker or primary project deep-dive question relevant to their resume experience and the target job.
+    3. Specify the questionType ("BEHAVIORAL", "TECHNICAL", "CODING", or "MIXED").
+
+    Return ONLY a JSON object matching this structure:
+    {
+        "greeting": "Hello ${candidateName}, welcome to your interview for the ${targetRole} position.",
+        "questionText": "To start off, could you walk me through...",
+        "questionType": "TECHNICAL"
+    }
     `;
 
-    try {
-        const questions = await generateStructuredAI(prompt, DynamicQuestionsSchema);
-        const questionNumbers = questions.map((question) => question.questionNo);
-        const expectedNumbers = Array.from({ length: targetCount }, (_, index) => index + 1);
-        if (new Set(questionNumbers).size !== targetCount || !expectedNumbers.every((number) => questionNumbers.includes(number))) {
-            const error = new Error("AI generated invalid or duplicate question numbers") as any;
-            error.statusCode = 422;
-            throw error;
-        }
-        return questions;
-    } catch (error) {
-        console.error("AI Question Generation Error:", error);
-        throw error;
-    }
+    return await generateStructuredAI(prompt, FirstQuestionSchema);
+}
+
+export async function evaluateTurnAndGenerateNextWithAI({
+    candidateName,
+    targetRole,
+    resumeText,
+    jobDescriptionText,
+    difficultyLevel,
+    sessionType,
+    currentQuestionNo,
+    totalQuestions,
+    questionText,
+    questionType,
+    answerText,
+    codeSnippet,
+    codeLanguage,
+    history
+}: {
+    candidateName: string;
+    targetRole: string;
+    resumeText: string;
+    jobDescriptionText: string;
+    difficultyLevel: string;
+    sessionType: string;
+    currentQuestionNo: number;
+    totalQuestions: number;
+    questionText: string;
+    questionType: string;
+    answerText?: string | null;
+    codeSnippet?: string | null;
+    codeLanguage?: string | null;
+    history: Array<{ questionNo: number; questionText: string; answerText?: string | null; codeSnippet?: string | null; score?: number | null }>;
+}) {
+    const isLastQuestion = currentQuestionNo >= totalQuestions;
+
+    const formattedHistory = history.map((h) => `
+    [Q${h.questionNo}]: ${h.questionText}
+    [Candidate Answer]: ${h.answerText || "(No verbal answer provided)"}
+    ${h.codeSnippet ? `[Candidate Code]:\n\`\`\`\n${h.codeSnippet}\n\`\`\`` : ""}
+    [Score]: ${h.score ?? "Pending"}
+    `).join("\n---\n");
+
+    const prompt = `
+    You are an expert technical interviewer evaluating Question #${currentQuestionNo} out of ${totalQuestions} for candidate "${candidateName}" applying for "${targetRole}".
+    Difficulty: ${difficultyLevel} | Focus: ${sessionType}
+
+    Resume Context:
+    ${resumeText.slice(0, 10_000)}
+
+    Job Context:
+    ${jobDescriptionText.slice(0, 10_000)}
+
+    Interview History So Far:
+    ${formattedHistory || "First question in session."}
+
+    CURRENT TURN TO EVALUATE:
+    Question #${currentQuestionNo}: "${questionText}" (Type: ${questionType})
+    Candidate Answer: "${answerText || "No verbal explanation provided."}"
+    ${codeSnippet ? `Candidate Code (${codeLanguage || "code"}):\n\`\`\`${codeLanguage || ""}\n${codeSnippet}\n\`\`\`` : "No code submitted."}
+
+    EVALUATION INSTRUCTIONS:
+    1. Score the answer from 0 to 100 based on technical depth, clarity, accuracy, and edge-case handling.
+    2. Provide constructive, concise feedback explaining what was good and what could be improved.
+    3. If code was provided, include a brief codeReview note (syntax, time/space complexity O(n), clean patterns).
+
+    NEXT QUESTION INSTRUCTIONS:
+    - Current Question No: ${currentQuestionNo} | Total Target: ${totalQuestions}.
+    - Is this the final question of the session? ${isLastQuestion ? "YES (Final Question)" : "NO (More questions remain)"}
+    - If NOT the final question:
+      - If the candidate gave a vague/shallow answer, you may ask an adaptive follow-up probe (set isFollowUp: true, nextQuestionText: "...").
+      - Otherwise, advance to the next technical topic/scenario (set isFollowUp: false, nextQuestionText: "...").
+    - If this IS the final question:
+      - Provide concludingRemarks.
+      - Provide a finalSummary with overallScore (0-100), overallFeedback, top strengths, areasToImprove, and competencyScores (problemSolving, technicalKnowledge, communication, codeQuality from 0-100).
+
+    Return ONLY a valid JSON object matching the requested schema.
+    `;
+
+    return await generateStructuredAI(prompt, TurnEvaluationSchema);
 }
 
 export default {
-    generateQuestionWithAI,
+    generateFirstQuestionWithAI,
+    evaluateTurnAndGenerateNextWithAI,
 };

@@ -1,5 +1,4 @@
 import { prisma } from "../../config/db";
-import { evaluateFullSessionWithAI } from "./answer.parser";
 
 export interface SubmitAnswerInput {
     clerkId: string;

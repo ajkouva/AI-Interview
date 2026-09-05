@@ -12,13 +12,13 @@ const createSession = asyncHandler(async (req: Request, res: Response) => {
         return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { resumeId, jobDescriptionId, sessionType, difficulty, durationMinutes, noOfQuestions } = req.body;
+    const { resumeId, jobDescriptionId, sessionType, difficulty, durationMinutes, noOfQuestions, totalQuestions, voice } = req.body;
 
-    if (!resumeId || typeof resumeId !== 'string') {
-        return res.status(400).json({ error: "resumeId is required" });
+    if (resumeId && typeof resumeId !== 'string') {
+        return res.status(400).json({ error: "resumeId must be a string" });
     }
-    if (!jobDescriptionId || typeof jobDescriptionId !== 'string') {
-        return res.status(400).json({ error: "jobDescriptionId is required" });
+    if (jobDescriptionId && typeof jobDescriptionId !== 'string') {
+        return res.status(400).json({ error: "jobDescriptionId must be a string" });
     }
 
     if (sessionType && (typeof sessionType !== 'string' || !VALID_SESSION_TYPES.includes(sessionType))) {
@@ -30,8 +30,10 @@ const createSession = asyncHandler(async (req: Request, res: Response) => {
     if (durationMinutes !== undefined && (typeof durationMinutes !== 'number' || durationMinutes < 5 || durationMinutes > 180)) {
         return res.status(400).json({ error: "durationMinutes must be a number between 5 and 180" });
     }
-    if (noOfQuestions !== undefined && (typeof noOfQuestions !== 'number' || noOfQuestions < 1 || noOfQuestions > 20)) {
-        return res.status(400).json({ error: "noOfQuestions must be a number between 1 and 20" });
+
+    const questionCount = totalQuestions ?? noOfQuestions;
+    if (questionCount !== undefined && (typeof questionCount !== 'number' || questionCount < 1 || questionCount > 20)) {
+        return res.status(400).json({ error: "totalQuestions must be a number between 1 and 20" });
     }
 
     const session = await sessionService.createSession(clerkId, {
@@ -40,10 +42,43 @@ const createSession = asyncHandler(async (req: Request, res: Response) => {
         sessionType,
         difficulty,
         durationMinutes,
-        noOfQuestions
+        totalQuestions: questionCount,
+        voice
     });
 
     res.status(201).json(session);
+});
+
+const submitTurn = asyncHandler(async (req: Request, res: Response) => {
+    const clerkId = getClerkUserId(req);
+    if (!clerkId) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { sessionId } = req.params;
+    const { questionId, answerText, codeSnippet, codeLanguage, voice } = req.body;
+
+    if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({ error: "Session ID is required" });
+    }
+    if (!questionId || typeof questionId !== 'string') {
+        return res.status(400).json({ error: "questionId is required" });
+    }
+
+    const result = await sessionService.submitTurn({
+        clerkId,
+        sessionId,
+        questionId,
+        answerText,
+        codeSnippet,
+        codeLanguage,
+        voice
+    });
+
+    res.status(200).json({
+        message: "Turn evaluated successfully",
+        data: result
+    });
 });
 
 const getAllSessions = asyncHandler(async (req: Request, res: Response) => {
@@ -87,26 +122,10 @@ const getSessionById = asyncHandler(async (req: Request, res: Response) => {
     const session = await sessionService.getSessionById(clerkId, id);
     res.status(200).json(session);
 });
-
-const submitSession = asyncHandler(async (req: Request, res: Response) => {
-    const clerkId = getClerkUserId(req);
-    if (!clerkId) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const { sessionId } = req.params;
-    if (!sessionId || typeof sessionId !== 'string') {
-        return res.status(400).json({ error: "Session ID is required" });
-    }
-
-    const session = await sessionService.submitAndEvaluateSession(clerkId, sessionId);
-    res.status(200).json(session);
-});
-
 export default {
     createSession,
+    submitTurn,
     getAllSessions,
     getLatestSession,
-    getSessionById,
-    submitSession
+    getSessionById
 };
